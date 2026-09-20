@@ -1,12 +1,19 @@
 package service
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"site-backend-go/internal/db"
 	"site-backend-go/internal/dtos"
+	"uuid"
 )
 
 type UserStorage interface {
-	CreateUser(model db.UserCreateModel) error
+	CreateUser(model db.UserCreateModel) (uuid.UUID, error)
+	UpdateUser(model db.UserUpdateModel) error
+	GetUserByID(ctx context.Context, ID uuid.UUID) (*db.UserInfoModel, error)
+	GetUserByEmail(ctx context.Context, email string) (*db.UserInfoModel, error)
 }
 
 type UserService struct {
@@ -19,14 +26,82 @@ func NewUserService(storage UserStorage) *UserService {
 	}
 }
 
-func (s *UserService) Create(u dtos.UserCreateRequest) error {
-	dbbModel := db.UserCreateModel{
+func (s *UserService) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+	userInfo, err := s.storage.GetUserByEmail(ctx, email)
+	if err != nil {
+		return false, err
+	}
+
+	if userInfo == nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (s *UserService) Create(u dtos.UserCreateRequest) (uuid.UUID, error) {
+	dbModel := db.UserCreateModel{
 		Email: u.Email,
 	}
 
-	if err := s.storage.CreateUser(dbbModel); err != nil {
+	userID, err := s.storage.CreateUser(dbModel)
+	if err != nil {
+		return uuid.Nil(), err
+	}
+
+	return userID, nil
+}
+
+func (s *UserService) Update(u dtos.UserUpdateRequest) error {
+	dbModel := db.UserUpdateModel{
+		ID:          u.ID,
+		Name:        u.Name,
+		Address:     u.Address,
+		PhoneNumber: u.PhoneNumber,
+	}
+
+	if err := s.storage.UpdateUser(dbModel); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (s *UserService) GetUserByID(ctx context.Context, ID uuid.UUID) (*dtos.UserInfoResponse, error) {
+	userModel, err := s.storage.GetUserByID(ctx, ID)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &dtos.UserInfoResponse{
+		ID:          userModel.ID,
+		Name:        userModel.Name,
+		Email:       *userModel.Email,
+		PhoneNumber: userModel.PhoneNumber,
+		Address:     userModel.Address,
+		Role:        *userModel.Role,
+	}
+
+	return response, nil
+}
+
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*dtos.UserInfoResponse, error) {
+	userModel, err := s.storage.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		return nil, err
+	}
+
+	response := &dtos.UserInfoResponse{
+		ID:          userModel.ID,
+		Name:        userModel.Name,
+		Email:       *userModel.Email,
+		PhoneNumber: userModel.PhoneNumber,
+		Address:     userModel.Address,
+		Role:        *userModel.Role,
+	}
+
+	return response, nil
 }

@@ -4,23 +4,41 @@ import (
 	"encoding/json"
 	"net/http"
 	"site-backend-go/internal/auth"
-	"site-backend-go/internal/service"
+	"site-backend-go/internal/dtos"
+	"uuid"
 )
 
-type FileHandler struct {
-	FileService *service.FileService
-}
+//type FileHandler struct {
+//	FileService *service.FileService
+//}
+//
+//func NewFileHandler(fs *service.FileService) *FileHandler {
+//	return &FileHandler{FileService: fs}
+//}
 
-func NewFileHandler(fs *service.FileService) *FileHandler {
-	return &FileHandler{FileService: fs}
-}
+func (s *Server) DownloadFileByIDHandler(w http.ResponseWriter, r *http.Request) {
+	var req dtos.DownloadFileRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
 
-func DownloadFileByIDHandler(w http.ResponseWriter, r *http.Request) {
-	filePath := "/files/test.text"
+	err := decoder.Decode(&req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Validation failed"}`))
+	}
+	if err := validate.Struct(req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Validation failed", "details":"` + err.Error() + `"}`))
+		return
+	}
+
+	fileName, err := s.FileService.GetFilenameByID(req.FileID)
+
+	filePath := "./files/" + fileName
 	http.ServeFile(w, r, filePath)
 }
 
-func (f *FileHandler) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	uploaderID, err := auth.GetUserIDFromCookies(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -40,13 +58,15 @@ func (f *FileHandler) UploadFileHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	fileID, err := f.FileService.SaveFileLocally(file, header.Filename)
+	genFileID := uuid.New()
+
+	fileID, err := s.FileService.SaveFileLocally(file, genFileID, header.Filename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	err = f.FileService.SaveFileInfo(uploaderID)
+	err = s.FileService.SaveFileInfo(uploaderID, genFileID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
