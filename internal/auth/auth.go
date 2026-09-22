@@ -124,7 +124,7 @@ func (s *AuthHandler) RequestAuthCodeHandler(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Код отправлен на почту."}'`))
+	w.Write([]byte(`{"message": "Код отправлен на почту."}`))
 }
 
 func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +155,7 @@ func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		newUser := dtos.UserCreateRequest{
 			Email: lr.Email,
 		}
-		userID, err = s.userService.Create(newUser)
+		userID, err = s.userService.Create(ctx, newUser)
 		userRole = "user" // для создания пользователя
 	} else {
 		userID = userInfo.ID
