@@ -81,6 +81,7 @@ func InitDB(connString string) (*sql.DB, error) {
 	    id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
 	    sender_id UUID NOT NULL,
 	    ticket_id UUID NOT NULL,
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	    message_text TEXT NOT NULL,
 	    files UUID[] DEFAULT NULL,
 	    CONSTRAINT fk_extra_messages_ticket
