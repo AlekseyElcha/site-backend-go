@@ -9,6 +9,8 @@ import (
 )
 
 func (s *Server) CreateNewUserHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method not allowed"))
@@ -31,7 +33,7 @@ func (s *Server) CreateNewUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := s.UserService.Create(u)
+	_, err := s.UserService.Create(ctx, u)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "internal server error"}`))
@@ -45,6 +47,8 @@ func (s *Server) CreateNewUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) UpdateUserInfoByIDHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	var u dtos.UserUpdateRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -61,7 +65,7 @@ func (s *Server) UpdateUserInfoByIDHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.UserService.Update(u)
+	s.UserService.Update(ctx, u)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
