@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"site-backend-go/internal/exceptions"
 	"uuid"
 )
 
-func (s *Storage) GetAllTicketsInfo() ([]TicketInfoModel, error) {
+func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketInfoModel, error) {
 	query := `
 		SELECT
 			id
@@ -60,33 +59,42 @@ func (s *Storage) GetAllTicketsInfo() ([]TicketInfoModel, error) {
 	return Tickets, nil
 }
 
-func (s *Storage) GetTicketInfoByID(id uuid.UUID) (*TicketInfoModel, error) {
+func (s *Storage) GetTicketInfoByID(ctx context.Context, ID uuid.UUID) (*TicketInfoModel, error) {
 	queryTicket := `
 		SELECT 
 		    t.id
 		    , t.user_id
+		    , t.name
 			, t.created_at
+		    , t.email
+		    , t.address
+		    , t.phone_number
 		    , t.question
 		    , t.status
-		    , a.answer_text 
 		FROM tickets t
-		JOIN answers a ON t.id = a.ticket_id
 		WHERE t.id = $1;
 	`
-	var t TicketInfoModel // TODO: здесь
-	err := s.db.QueryRow(queryTicket, id).Scan(&t.ID, &t.CreatedAt, &t.Question, &t.Status)
+	var t TicketInfoModel
+
+	err := s.db.QueryRow(queryTicket, ID).Scan(
+		&t.ID,
+		&t.UserID,
+		&t.Name,
+		&t.CreatedAt,
+		&t.Email,
+		&t.Address,
+		&t.PhoneNumber,
+		&t.Question,
+		&t.Status,
+	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, exceptions.ErrNotFound
-		}
-		fmt.Println(err)
 		return nil, err
 	}
 
 	return &t, nil
 }
 
-func (s *Storage) GetAllTicketsByUserID(userID uuid.UUID) ([]TicketInfoModel, error) {
+func (s *Storage) GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) ([]TicketGeneralInfoModel, error) {
 	query := `
 		SELECT
 			id
@@ -112,10 +120,10 @@ func (s *Storage) GetAllTicketsByUserID(userID uuid.UUID) ([]TicketInfoModel, er
 	}
 	defer rows.Close()
 
-	var tickets []TicketInfoModel
+	var tickets []TicketGeneralInfoModel
 
 	for rows.Next() {
-		var t TicketInfoModel
+		var t TicketGeneralInfoModel
 		err := rows.Scan(
 			&t.ID,
 			&t.UserID,
@@ -137,7 +145,7 @@ func (s *Storage) GetAllTicketsByUserID(userID uuid.UUID) ([]TicketInfoModel, er
 	return tickets, nil
 }
 
-func (s *Storage) GetAnswersForTicketByID(id uuid.UUID) ([]TicketAnswersModel, error) {
+func (s *Storage) GetAnswerForTicketByID(ctx context.Context, id uuid.UUID) (*TicketAnswersModel, error) { // TODO: нейминг
 	query := `
 		SELECT 
 		    id
@@ -145,65 +153,45 @@ func (s *Storage) GetAnswersForTicketByID(id uuid.UUID) ([]TicketAnswersModel, e
 		    , ticket_id
 		    , answer_text
 		    , created_at
-		FROM tickets
-		WHERE id = $1;
+		FROM answers
+		WHERE ticket_id = $1;
 	`
 
-	//var t TicketAnswersModel
-	//err := s.db.QueryRow(query, id).Scan(&t.ID, &t.SenderID, &t.TicketID, &t.AnswerText, &t.CreatedAt)
-	//if err != nil {
-	//	if errors.Is(err, sql.ErrNoRows) {
-	//		return nil, exceptions.ErrNotFound
-	//	}
-	//	fmt.Println(err)
-	//	return nil, err
-	//}
+	var ans TicketAnswersModel
 
-	rows, err := s.db.Query(query, id)
+	err := s.db.QueryRow(
+		query, id,
+	).Scan(
+		&ans.ID,
+		&ans.SenderID,
+		&ans.TicketID,
+		&ans.AnswerText,
+		&ans.CreatedAt,
+	)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, exceptions.ErrNotFound
-		}
 		return nil, err
 	}
 
-	var answers []TicketAnswersModel
-
-	for rows.Next() {
-		var t TicketAnswersModel
-		err := rows.Scan(
-			&t.ID,
-			&t.SenderID,
-			&t.TicketID,
-			&t.AnswerText,
-			&t.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		answers = append(answers, t)
-	}
-
-	return answers, nil
+	return &ans, err
 }
 
-func (s *Storage) GetExtraMessagesForTicketByID(id uuid.UUID) ([]ExtraMessageInfoModel, error) {
+func (s *Storage) GetExtraMessagesForTicketByID(ctx context.Context, id uuid.UUID) ([]ExtraMessageInfoModel, error) { // TODO: пересмотреть
 	query := `
 		SELECT 
-		    id
-		 	, sender_id
-		 	, ticket_id
-		    , message_text
-			, files
-		FROM extra_messages
-		WHERE id = $1;
+		    m.id
+		 	, m.sender_id
+		 	, m.ticket_id
+		    , m.message_text
+			, m.files
+			, u.role as sender_role
+		FROM extra_messages m
+		JOIN users u ON m.sender_id = u.id
+		WHERE m.ticket_id = $1;
 	`
 
 	rows, err := s.db.Query(query, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, exceptions.ErrNotFound
-		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -219,12 +207,20 @@ func (s *Storage) GetExtraMessagesForTicketByID(id uuid.UUID) ([]ExtraMessageInf
 			&msg.TicketID,
 			&msg.MessageText,
 			&msg.FilesID,
+			&msg.SenderRole,
 		)
 		if err != nil {
 			return nil, err
 		}
 
 		extraMessages = append(extraMessages, msg)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(extraMessages) == 0 {
+		return nil, exceptions.ErrNotFound
 	}
 
 	return extraMessages, nil
@@ -266,7 +262,7 @@ func (s *Storage) CreateTicket(ctx context.Context, model CreateTicketModel) (uu
 	return ticketID, nil
 }
 
-func (s *Storage) UpdateTicketStatus(model UpdateTicketStatusModel) error {
+func (s *Storage) UpdateTicketStatus(ctx context.Context, model UpdateTicketStatusModel) error {
 	query := `
 		UPDATE tickets
 		SET status = $2
@@ -283,7 +279,7 @@ func (s *Storage) UpdateTicketStatus(model UpdateTicketStatusModel) error {
 	return nil
 }
 
-func (s *Storage) AnswerTicket(model AnswerTicketModel, senderID uuid.UUID) error {
+func (s *Storage) AnswerTicket(ctx context.Context, model AnswerTicketModel, senderID uuid.UUID) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -311,9 +307,9 @@ func (s *Storage) AnswerTicket(model AnswerTicketModel, senderID uuid.UUID) erro
 	return tx.Commit()
 }
 
-func (s *Storage) CreateExtraMessageForTicket(model ExtraMessageModel) error {
+func (s *Storage) CreateExtraMessageForTicket(ctx context.Context, model ExtraMessageModel) error {
 	query := `
-		INSERT INTO extra_messages(ticket_id, sender_id, message_text, filesdco)
+		INSERT INTO extra_messages(ticket_id, sender_id, message_text, files)
 		VALUES ($1, $2, $3, $4)
 	`
 
@@ -333,7 +329,7 @@ func (s *Storage) CreateExtraMessageForTicket(model ExtraMessageModel) error {
 	return nil
 }
 
-func (s *Storage) LogTicketOperation(model TicketLogModel) error {
+func (s *Storage) LogTicketOperation(ctx context.Context, model TicketLogModel) error {
 	query := `
 		INSERT INTO ticket_logs(ticket_id, changed_by, action)
 		VALUES ($1, $2, $3)
