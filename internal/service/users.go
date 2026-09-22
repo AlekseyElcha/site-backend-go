@@ -4,25 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"site-backend-go/internal/db"
 	"site-backend-go/internal/dtos"
 	"uuid"
 )
 
 type UserStorage interface {
-	CreateUser(model db.UserCreateModel) (uuid.UUID, error)
-	UpdateUser(model db.UserUpdateModel) error
+	CreateUser(ctx context.Context, model db.UserCreateModel) (uuid.UUID, error)
+	UpdateUser(ctx context.Context, model db.UserUpdateModel) error
 	GetUserByID(ctx context.Context, ID uuid.UUID) (*db.UserInfoModel, error)
 	GetUserByEmail(ctx context.Context, email string) (*db.UserInfoModel, error)
 }
 
 type UserService struct {
 	storage UserStorage
+	log     *slog.Logger
 }
 
-func NewUserService(storage UserStorage) *UserService {
+func NewUserService(storage UserStorage, log *slog.Logger) *UserService {
 	return &UserService{
 		storage: storage,
+		log:     log,
 	}
 }
 
@@ -39,12 +42,12 @@ func (s *UserService) UserExistsByEmail(ctx context.Context, email string) (bool
 	return true, nil
 }
 
-func (s *UserService) Create(u dtos.UserCreateRequest) (uuid.UUID, error) {
+func (s *UserService) Create(ctx context.Context, u dtos.UserCreateRequest) (uuid.UUID, error) {
 	dbModel := db.UserCreateModel{
 		Email: u.Email,
 	}
 
-	userID, err := s.storage.CreateUser(dbModel)
+	userID, err := s.storage.CreateUser(ctx, dbModel)
 	if err != nil {
 		return uuid.Nil(), err
 	}
@@ -52,7 +55,7 @@ func (s *UserService) Create(u dtos.UserCreateRequest) (uuid.UUID, error) {
 	return userID, nil
 }
 
-func (s *UserService) Update(u dtos.UserUpdateRequest) error {
+func (s *UserService) Update(ctx context.Context, u dtos.UserUpdateRequest) error {
 	dbModel := db.UserUpdateModel{
 		ID:          u.ID,
 		Name:        u.Name,
@@ -60,7 +63,7 @@ func (s *UserService) Update(u dtos.UserUpdateRequest) error {
 		PhoneNumber: u.PhoneNumber,
 	}
 
-	if err := s.storage.UpdateUser(dbModel); err != nil {
+	if err := s.storage.UpdateUser(ctx, dbModel); err != nil {
 		return err
 	}
 
