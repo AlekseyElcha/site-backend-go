@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"site-backend-go/internal/auth"
 	"site-backend-go/internal/config"
 	"site-backend-go/internal/db"
@@ -10,6 +12,7 @@ import (
 	"site-backend-go/internal/redis_client"
 	"site-backend-go/internal/service"
 	"strconv"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -29,8 +32,22 @@ func main() {
 		cfg.DB.Port,
 		cfg.DB.Name,
 	)
-	//
-	//ctx := context.Background()
+
+	logLevelCfg := cfg.Logger.Level
+	var logLevel slog.Level
+
+	err = logLevel.UnmarshalText([]byte(strings.ToLower(logLevelCfg)))
+	if err != nil {
+		logLevel = slog.LevelInfo
+		fmt.Println("error parsing log level, using LevelInfo as default: " + err.Error())
+	}
+
+	loggerOpts := &slog.HandlerOptions{
+		Level: logLevel,
+		// AddSource: true,
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, loggerOpts))
 
 	sqlDB, err := db.InitDB(dbPgConnString)
 	if err != nil {
@@ -53,8 +70,8 @@ func main() {
 
 	rdb := redis_client.NewRedisClient(rawRedisClient)
 
-	ticketService := service.NewTicketService(dbStorage)
-	userService := service.NewUserService(dbStorage)
+	ticketService := service.NewTicketService(dbStorage, logger)
+	userService := service.NewUserService(dbStorage, logger)
 	emailSenderService := service.NewEmailSenderService(isLocalMode, resendKey, fromEmail)
 	filesService := service.NewFileService(uploadDir, dbStorage)
 	authHandlers := auth.NewAuthHandler(rdb, userService)
@@ -65,6 +82,7 @@ func main() {
 		emailSenderService,
 		filesService,
 		cfg,
+		logger,
 	)
 
 	mux := http.NewServeMux()
@@ -77,6 +95,7 @@ func main() {
 	// Создание нового тикета
 	mux.HandleFunc("POST /api/v1/tickets/create", appServer.CreateTicketHandler)
 	// Получение всех обращений пользователя по ID
+	mux.HandleFunc("GET /api/v1/tickets/user/{user_id}", appServer.GetTicketsByUserIDHandler)
 
 	//
 	mux.HandleFunc("POST /api/v1/tickets/answer", appServer.AnswerTicketByIDHandler)
