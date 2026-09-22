@@ -62,7 +62,20 @@ type TicketInfoModel struct {
 	Question    string
 	Files       []uuid.UUID
 	Status      string
-	Answers     []TicketAnswersInfo
+	Answer      TicketAnswersInfo
+}
+
+type TicketGeneralInfoModel struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	CreatedAt   time.Time
+	Name        string
+	Email       string
+	PhoneNumber string
+	Address     string
+	Question    string
+	Files       []uuid.UUID
+	Status      string
 }
 
 type TicketAnswersModel struct {
@@ -80,7 +93,6 @@ type TicketExtraMessagesModel struct {
 	MessageText string      `db:"message_text"`
 	Files       []uuid.UUID `db:"files"`
 }
-
 type ExtraMessageModel struct {
 	TicketID    uuid.UUID
 	SenderID    uuid.UUID
@@ -92,6 +104,7 @@ type ExtraMessageInfoModel struct {
 	ID          uuid.UUID   `db:"id"`
 	TicketID    uuid.UUID   `db:"ticket_id"`
 	SenderID    uuid.UUID   `db:"sender_id"`
+	SenderRole  string      `db:"sender_role"`
 	MessageText string      `db:"message_text"`
 	FilesID     []uuid.UUID `db:"files_id"`
 }
