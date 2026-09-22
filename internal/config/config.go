@@ -10,6 +10,10 @@ import (
 type Config struct {
 	Env string `env:"APP_ENV" envDefault:"development"`
 
+	Logger struct {
+		Level string `env:"LOG_LEVEL" envDefault:"info"`
+	}
+
 	App struct {
 		Port int `env:"APP_PORT" validate:"required,min=1,max=65535"`
 	}
