@@ -67,7 +67,23 @@ func (s *Storage) GetUserByID(ctx context.Context, ID uuid.UUID) (*UserInfoModel
 	return &userModel, nil
 }
 
-func (s *Storage) UpdateUser(model UserUpdateModel) error {
+func (s *Storage) GetUserRoleByID(ctx context.Context, ID uuid.UUID) (string, error) {
+	query := `
+		SELECT
+			role
+		FROM users
+		WHERE id = $1
+	`
+	var role string
+	err := s.db.QueryRowContext(ctx, query, ID).Scan(&role)
+	if err != nil {
+		return "", err
+	}
+
+	return role, nil
+}
+
+func (s *Storage) UpdateUser(ctx context.Context, model UserUpdateModel) error {
 	query := `
 		UPDATE users
 		SET 
@@ -77,14 +93,14 @@ func (s *Storage) UpdateUser(model UserUpdateModel) error {
 		WHERE id = $1
 	`
 
-	if _, err := s.db.Exec(query, model.ID, model.Name, model.Address, model.PhoneNumber); err != nil {
+	if _, err := s.db.ExecContext(ctx, query, model.ID, model.Name, model.Address, model.PhoneNumber); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *Storage) CreateUser(model UserCreateModel) (uuid.UUID, error) {
+func (s *Storage) CreateUser(ctx context.Context, model UserCreateModel) (uuid.UUID, error) {
 	query := `
 		INSERT INTO users (email)
 		VALUES ($1)
