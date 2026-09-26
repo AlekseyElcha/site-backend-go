@@ -9,11 +9,13 @@ import (
 	"site-backend-go/internal/config"
 	"site-backend-go/internal/db"
 	"site-backend-go/internal/handlers"
+	"site-backend-go/internal/middleware"
 	"site-backend-go/internal/redis_client"
 	"site-backend-go/internal/service"
 	"strconv"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -55,13 +57,22 @@ func main() {
 	}
 	defer sqlDB.Close()
 
+	publicKeyBytes, err := os.ReadFile("certs/public.pem")
+	if err != nil {
+		panic(fmt.Errorf("failed to read public key: %w", err))
+	}
+	verifyKey, err := jwt.ParseRSAPublicKeyFromPEM(publicKeyBytes)
+	if err != nil {
+		panic(fmt.Errorf("public key error %v", err))
+	}
+
 	isLocalMode := true
 	resendKey := cfg.Email.ResendAPIKey
 	fromEmail := cfg.Email.FromEmail
 
 	uploadDir := cfg.Files.UploadDir
 
-	dbStorage := db.NewStorage(sqlDB)
+	dbStorage := db.NewStorage(sqlDB, logger)
 	rawRedisClient := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Host + ":" + strconv.Itoa(cfg.Redis.Port),
 		Password: cfg.Redis.Password,
@@ -74,6 +85,7 @@ func main() {
 	userService := service.NewUserService(dbStorage, logger)
 	emailSenderService := service.NewEmailSenderService(isLocalMode, resendKey, fromEmail)
 	filesService := service.NewFileService(uploadDir, dbStorage)
+	addressesService := service.NewAddressesService(dbStorage)
 	authHandlers := auth.NewAuthHandler(rdb, userService)
 
 	appServer := handlers.NewServer(
@@ -81,12 +93,18 @@ func main() {
 		userService,
 		emailSenderService,
 		filesService,
+		addressesService,
 		cfg,
 		logger,
 	)
 
 	mux := http.NewServeMux()
-	fmt.Println("Starting server...")
+	logger.Info("Starting server", "port", cfg.App.Port)
+
+	mm := middleware.NewMiddlewareManager(
+		logger,
+		verifyKey,
+	)
 
 	// Получение всех тикетов
 	mux.HandleFunc("/api/v1/tickets/get", appServer.GetAllTicketsInfoHandler)
@@ -98,7 +116,10 @@ func main() {
 	mux.HandleFunc("GET /api/v1/tickets/user/{user_id}", appServer.GetTicketsByUserIDHandler)
 
 	//
-	mux.HandleFunc("POST /api/v1/tickets/answer", appServer.AnswerTicketByIDHandler)
+	mux.Handle("POST /api/v1/tickets/answer", mm.AuthCheckMiddleware("admin")(
+		http.HandlerFunc(appServer.AnswerTicketByIDHandler),
+	))
+
 	//
 	mux.HandleFunc("PUT /api/v1/tickets/status/update", appServer.UpdateTicketStatusByIDHandler)
 
@@ -129,12 +150,20 @@ func main() {
 	//
 	mux.HandleFunc("GET /api/v1/files/download", appServer.DownloadFileByIDHandler)
 
+	mux.HandleFunc("GET /api/v1/address/find/street", appServer.FindSuitableStreetsHandler)
+
+	mux.HandleFunc("GET /api/v1/address/find/house", appServer.FindSuitableHousesHandler)
+
+	mux.HandleFunc("GET /api/v1/address/find/complete", appServer.FindSuitableAddressesHandler)
+
 	//
 	mux.Handle("/", http.FileServer(http.Dir("./frontend")))
 
+	wrappedMux := mm.LoggingAndRequestIDMiddleware(mux)
+
 	srv := http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.App.Port),
-		Handler: mux,
+		Handler: wrappedMux,
 	}
 
 	err = srv.ListenAndServe()
