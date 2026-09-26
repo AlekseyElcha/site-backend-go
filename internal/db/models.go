@@ -114,3 +114,15 @@ type TicketLogModel struct {
 	ChangedBy uuid.UUID
 	Action    string
 }
+
+type StreetAlikeModel struct {
+	Name string `db:"street"`
+}
+
+type HouseAlikeModel struct {
+	Number string `db:"house"`
+}
+
+type AddressAlikeModel struct {
+	FullAddress string `db:"full_address"`
+}
