@@ -2,18 +2,21 @@ package db
 
 import (
 	"database/sql"
+	"log/slog"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Storage struct {
-	db *sql.DB
+	db  *sql.DB
+	log *slog.Logger
 }
 
-func NewStorage(database *sql.DB) *Storage {
+func NewStorage(database *sql.DB, log *slog.Logger) *Storage {
 	return &Storage{
-		db: database,
+		db:  database,
+		log: log,
 	}
 }
 
