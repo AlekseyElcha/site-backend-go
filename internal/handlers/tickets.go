@@ -4,46 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"site-backend-go/internal/auth"
-	"site-backend-go/internal/config"
 	"site-backend-go/internal/dtos"
 	"site-backend-go/internal/exceptions"
-	"site-backend-go/internal/service"
 	"uuid"
 
 	"github.com/go-playground/validator/v10"
 )
 
 var validate = validator.New()
-
-type Server struct {
-	TicketService      service.TicketService
-	UserService        service.UserService
-	EmailSenderService service.EmailSenderService
-	FileService        service.FileService
-	Config             config.Config
-	Logger             *slog.Logger
-}
-
-func NewServer(
-	ticketService *service.TicketService,
-	userService *service.UserService,
-	emailSenderService service.EmailSenderService,
-	fileService *service.FileService,
-	config *config.Config,
-	logger *slog.Logger,
-) *Server {
-	return &Server{
-		TicketService:      *ticketService,
-		UserService:        *userService,
-		EmailSenderService: emailSenderService,
-		FileService:        *fileService,
-		Config:             *config,
-		Logger:             logger,
-	}
-}
 
 func (s *Server) GetAllTicketsInfoHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
