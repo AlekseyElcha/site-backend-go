@@ -70,3 +70,15 @@ type TicketAnswerRequest struct {
 type ExtraMessagesGetRequest struct {
 	TicketID uuid.UUID `json:"ticket_id" validate:"required"`
 }
+
+type StreetsAlikeResponse struct {
+	Streets []string `json:"streets"`
+}
+
+type HousesAlikeResponse struct {
+	Houses []string `json:"houses"`
+}
+
+type AddressesAlikeResponse struct {
+	FullAddresses []string `json:"addresses"`
+}
