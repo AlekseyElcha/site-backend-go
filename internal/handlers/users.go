@@ -11,12 +11,6 @@ import (
 func (s *Server) CreateNewUserHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write([]byte("Method not allowed"))
-		return
-	}
-
 	var u dtos.UserCreateRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
