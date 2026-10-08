@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"uuid"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,12 +18,15 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func (mm *MiddlewareManager) AuthCheckMiddleware(reqRole string) func(http.Handler) http.Handler {
+const UserIDKey string = "userID"
+
+func (mm *MiddlewareManager) AuthCheckMiddleware(reqRoles []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("auth_token")
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte("unauthorized"))
 				return
 			}
 
@@ -41,11 +46,16 @@ func (mm *MiddlewareManager) AuthCheckMiddleware(reqRole string) func(http.Handl
 				return
 			}
 
-			if claims.Role != reqRole {
+			userID := claims.UserID
+
+			if !slices.Contains(reqRoles, claims.Role) {
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte("forbidden"))
 				return
 			}
+
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
 		})
