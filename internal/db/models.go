@@ -26,12 +26,13 @@ type UserUpdateModel struct {
 }
 
 type CreateTicketModel struct {
-	UserID      uuid.UUID
-	Name        string
-	Email       string
-	PhoneNumber string
-	Address     string
-	Question    string
+	UserID      uuid.UUID   `db:"user_id"`
+	Name        string      `db:"name"`
+	Email       string      `db:"email"`
+	PhoneNumber string      `db:"phone_number"`
+	Address     string      `db:"address"`
+	Question    string      `db:"question"`
+	FilesIDs    []uuid.UUID `db:"files"`
 }
 
 type UpdateTicketStatusModel struct {
