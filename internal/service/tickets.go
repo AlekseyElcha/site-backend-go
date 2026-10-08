@@ -30,7 +30,7 @@ type TicketService struct {
 	log     *slog.Logger
 }
 
-func NewTicketService(storage *db.Storage, log *slog.Logger) *TicketService {
+func NewTicketService(storage TicketStorage, log *slog.Logger) *TicketService {
 	return &TicketService{
 		storage: storage,
 		log:     log,
@@ -100,6 +100,7 @@ func (s *TicketService) Create(ctx context.Context, t dtos.TicketCreateRequest, 
 		PhoneNumber: t.PhoneNumber,
 		Address:     t.Address,
 		Question:    t.Question,
+		FilesIDs:    t.FilesIDs,
 	}
 
 	ticketID, err := s.storage.CreateTicket(dbCtx, dbModel)
