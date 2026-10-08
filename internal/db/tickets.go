@@ -70,6 +70,7 @@ func (s *Storage) GetTicketInfoByID(ctx context.Context, ID uuid.UUID) (*TicketI
 		    , t.address
 		    , t.phone_number
 		    , t.question
+		    , t.files
 		    , t.status
 		FROM tickets t
 		WHERE t.id = $1;
@@ -85,6 +86,7 @@ func (s *Storage) GetTicketInfoByID(ctx context.Context, ID uuid.UUID) (*TicketI
 		&t.Address,
 		&t.PhoneNumber,
 		&t.Question,
+		&t.Files,
 		&t.Status,
 	)
 	if err != nil {
@@ -228,8 +230,16 @@ func (s *Storage) GetExtraMessagesForTicketByID(ctx context.Context, id uuid.UUI
 
 func (s *Storage) CreateTicket(ctx context.Context, model CreateTicketModel) (uuid.UUID, error) {
 	query := `
-		INSERT INTO tickets (user_id, name, email, phone_number, address, question)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO tickets (
+		                     user_id
+		                     , name
+		                     , email
+		                     , phone_number
+		                     , address
+		                     , files
+		                     , question
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id;`
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -248,6 +258,7 @@ func (s *Storage) CreateTicket(ctx context.Context, model CreateTicketModel) (uu
 		model.Email,
 		model.PhoneNumber,
 		model.Address,
+		model.FilesIDs,
 		model.Question,
 	).Scan(&ticketID)
 	if err != nil {
