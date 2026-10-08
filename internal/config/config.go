@@ -18,6 +18,10 @@ type Config struct {
 		Port int `env:"APP_PORT" validate:"required,min=1,max=65535"`
 	}
 
+	Mode struct {
+		IsLocal bool `env:"APP_IS_LOCAL" envDefault:"false"`
+	}
+
 	DB struct {
 		Name     string `env:"DB_NAME" validate:"required"`
 		Host     string `env:"DB_HOST" validate:"required,hostname|ip"`
