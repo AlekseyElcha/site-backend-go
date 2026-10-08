@@ -25,22 +25,13 @@ func main() {
 		panic(err)
 	}
 
-	// dbConnString := "postgres://postgres:postgres@localhost:5432/tickets?sslmode=disable"
-	dbPgConnString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		cfg.DB.User,
-		cfg.DB.Password,
-		cfg.DB.Host,
-		cfg.DB.Port,
-		cfg.DB.Name,
-	)
-
 	logLevelCfg := cfg.Logger.Level
 	var logLevel slog.Level
 
 	err = logLevel.UnmarshalText([]byte(strings.ToLower(logLevelCfg)))
 	if err != nil {
 		logLevel = slog.LevelInfo
+
 		fmt.Println("error parsing log level, using LevelInfo as default: " + err.Error())
 	}
 
@@ -50,6 +41,15 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, loggerOpts))
+
+	dbPgConnString := fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		cfg.DB.User,
+		cfg.DB.Password,
+		cfg.DB.Host,
+		cfg.DB.Port,
+		cfg.DB.Name,
+	)
 
 	sqlDB, err := db.InitDB(dbPgConnString)
 	if err != nil {
@@ -66,7 +66,8 @@ func main() {
 		panic(fmt.Errorf("public key error %v", err))
 	}
 
-	isLocalMode := true
+	isLocalMode := cfg.Mode.IsLocal
+
 	resendKey := cfg.Email.ResendAPIKey
 	fromEmail := cfg.Email.FromEmail
 
@@ -107,48 +108,84 @@ func main() {
 	)
 
 	// Получение всех тикетов
-	mux.HandleFunc("/api/v1/tickets/get", appServer.GetAllTicketsInfoHandler)
-	// Получение тикета по его ID
-	mux.HandleFunc("GET /api/v1/tickets/get/{id}", appServer.GetTicketInfoByIDHandler)
-	// Создание нового тикета
-	mux.HandleFunc("POST /api/v1/tickets/create", appServer.CreateTicketHandler)
-	// Получение всех обращений пользователя по ID
-	mux.HandleFunc("GET /api/v1/tickets/user/{user_id}", appServer.GetTicketsByUserIDHandler)
+	mux.Handle("GET /api/v1/tickets/get", mm.AuthCheckMiddleware([]string{"admin"})(
+		http.HandlerFunc(appServer.GetAllTicketsInfoHandler),
+	))
 
-	//
-	mux.Handle("POST /api/v1/tickets/answer", mm.AuthCheckMiddleware("admin")(
+	// Получение тикета по его ID
+	mux.Handle("GET /api/v1/tickets/get/{id}", mm.AuthCheckMiddleware([]string{"admin", "user"})(
+		http.HandlerFunc(appServer.GetTicketInfoByIDHandler),
+	))
+
+	// Создание нового тикета
+	mux.Handle("POST /api/v1/tickets/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.CreateTicketHandler),
+	))
+
+	// Получение всех обращений пользователя по ID
+	mux.Handle("GET /api/v1/tickets/user/{user_id}", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.GetTicketsByUserIDHandler),
+	))
+
+	// Ответ на обращение пользователя
+	mux.Handle("POST /api/v1/tickets/answer", mm.AuthCheckMiddleware([]string{"admin"})(
 		http.HandlerFunc(appServer.AnswerTicketByIDHandler),
 	))
 
 	//
-	mux.HandleFunc("PUT /api/v1/tickets/status/update", appServer.UpdateTicketStatusByIDHandler)
+	mux.Handle("POST /api/v1/tickets/status/update", mm.AuthCheckMiddleware([]string{"admin"})(
+		http.HandlerFunc(appServer.UpdateTicketStatusByIDHandler),
+	))
 
 	//
-	mux.HandleFunc("GET /api/v1/extra_messages/get", appServer.GetExtraMessagesForTicketByID)
+	mux.Handle("POST /api/v1/extra_messages/get", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.GetExtraMessagesForTicketByID),
+	))
+
 	//
-	mux.HandleFunc("POST /api/v1/extra_messages/create", appServer.CreateExtraMessageHandler)
+	mux.Handle("POST /api/v1/extra_messages/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.CreateExtraMessageHandler),
+	))
+
 	//
-	mux.HandleFunc("GET /api/v1/users/get/{id}", appServer.GetUserInfoByIDHandler)
+	mux.Handle("GET /api/v1/users/get/{id}", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.GetUserInfoByIDHandler),
+	))
+
 	//
-	mux.HandleFunc("POST /api/v1/users/create", appServer.CreateNewUserHandler)
+	mux.Handle("POST /api/v1/users/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.CreateNewUserHandler),
+	))
+
 	//
-	mux.HandleFunc("PUT /api/v1/users/update", appServer.UpdateUserInfoByIDHandler)
+	mux.Handle("PUT /api/v1/users/update", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.UpdateUserInfoByIDHandler),
+	))
 
 	//
 	mux.HandleFunc("GET /api/v1/auth/info", authHandlers.GetSelfInfoFromCookies)
+
 	//
 	mux.HandleFunc("POST /api/v1/auth/code", authHandlers.RequestAuthCodeHandler)
+
 	//
 	mux.HandleFunc("POST /api/v1/auth/login", authHandlers.LoginHandler)
+
 	//
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandlers.RefreshHandler)
+
 	//
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandlers.LogoutHandler)
 
 	//
-	mux.HandleFunc("POST /api/v1/files/upload", appServer.UploadFileHandler)
+	mux.Handle("POST /api/v1/files/upload", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.UploadFileHandler),
+	))
+
 	//
-	mux.HandleFunc("GET /api/v1/files/download", appServer.DownloadFileByIDHandler)
+	mux.Handle("POST /api/v1/files/download", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.DownloadFileByIDHandler),
+	))
 
 	mux.HandleFunc("GET /api/v1/address/find/street", appServer.FindSuitableStreetsHandler)
 
@@ -156,7 +193,6 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/address/find/complete", appServer.FindSuitableAddressesHandler)
 
-	//
 	mux.Handle("/", http.FileServer(http.Dir("./frontend")))
 
 	wrappedMux := mm.LoggingAndRequestIDMiddleware(mux)
