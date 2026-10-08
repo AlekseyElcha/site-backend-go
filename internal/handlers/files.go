@@ -3,8 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"site-backend-go/internal/auth"
 	"site-backend-go/internal/dtos"
+	"site-backend-go/internal/middleware"
 	"uuid"
 )
 
@@ -39,21 +39,21 @@ func (s *Server) DownloadFileByIDHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
-	uploaderID, err := auth.GetUserIDFromCookies(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+	uploaderID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Validation failed"}`))
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteError(w, http.StatusBadRequest, "Error parsing multipart form")
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "Missing file parameter", http.StatusBadRequest)
+		WriteError(w, http.StatusBadRequest, "Missing file parameter")
 		return
 	}
 	defer file.Close()
@@ -62,14 +62,15 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	fileID, err := s.FileService.SaveFileLocally(file, genFileID, header.Filename)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.Logger.Error("error while saving file in storage", "fileID", fileID, "error", err)
 		return
 	}
 
 	err = s.FileService.SaveFileInfo(uploaderID, genFileID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.Logger.Error("error while saving file info", "fileID", "genFileID", genFileID, fileID, "error", err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
