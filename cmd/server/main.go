@@ -19,6 +19,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+var Version = "1.0.0"
+
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -42,6 +44,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, loggerOpts))
 
+	// postgres db
 	dbPgConnString := fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DB.User,
@@ -132,73 +135,78 @@ func main() {
 		http.HandlerFunc(appServer.AnswerTicketByIDHandler),
 	))
 
-	//
+	// Обновление статуса обращения по его ID
 	mux.Handle("POST /api/v1/tickets/status/update", mm.AuthCheckMiddleware([]string{"admin"})(
 		http.HandlerFunc(appServer.UpdateTicketStatusByIDHandler),
 	))
 
-	//
+	// Получение всех дполнительных сообщений пользователя по ID обращения
 	mux.Handle("POST /api/v1/extra_messages/get", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.GetExtraMessagesForTicketByID),
 	))
 
-	//
+	// Создание дополнительного сообщения
 	mux.Handle("POST /api/v1/extra_messages/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.CreateExtraMessageHandler),
 	))
 
-	//
+	// Получение инормации о пользователе по его ID
 	mux.Handle("GET /api/v1/users/get/{id}", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.GetUserInfoByIDHandler),
 	))
 
-	//
+	// Создание нового пользователя
 	mux.Handle("POST /api/v1/users/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.CreateNewUserHandler),
 	))
 
-	//
+	// Обноление информации о пользователе по его ID
 	mux.Handle("PUT /api/v1/users/update", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.UpdateUserInfoByIDHandler),
 	))
 
-	//
+	// Информация по авторизации
 	mux.HandleFunc("GET /api/v1/auth/info", authHandlers.GetSelfInfoFromCookies)
 
-	//
+	// Запрос кода на email для аутентификации
 	mux.HandleFunc("POST /api/v1/auth/code", authHandlers.RequestAuthCodeHandler)
 
-	//
+	// Логин, тут без комментариев
 	mux.HandleFunc("POST /api/v1/auth/login", authHandlers.LoginHandler)
 
-	//
+	// Продление сессии пользователя
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandlers.RefreshHandler)
 
-	//
+	// Логаут, буквально
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandlers.LogoutHandler)
 
-	//
+	// Загрузка файла на сервер
 	mux.Handle("POST /api/v1/files/upload", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.UploadFileHandler),
 	))
 
-	//
+	// Скачивание файла с сервера
 	mux.Handle("POST /api/v1/files/download", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.DownloadFileByIDHandler),
 	))
 
+	// Поиск улиц среди доступных адресов
 	mux.HandleFunc("GET /api/v1/address/find/street", appServer.FindSuitableStreetsHandler)
 
+	// Поиск домов среди доступных адресов
 	mux.HandleFunc("GET /api/v1/address/find/house", appServer.FindSuitableHousesHandler)
 
+	// Полный поиск по улица + дом + подъезд
 	mux.HandleFunc("GET /api/v1/address/find/complete", appServer.FindSuitableAddressesHandler)
 
+	// Раздача фронта
 	mux.Handle("/", http.FileServer(http.Dir("./frontend")))
 
 	wrappedMux := mm.LoggingAndRequestIDMiddleware(mux)
 
 	srv := http.Server{
-		Addr:    ":" + strconv.Itoa(cfg.App.Port),
+		// Addr:    ":" + strconv.Itoa(cfg.App.Port),
+		Addr:    "0.0.0.0:" + strconv.Itoa(cfg.App.Port),
 		Handler: wrappedMux,
 	}
 
