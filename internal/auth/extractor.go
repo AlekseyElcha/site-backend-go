@@ -37,5 +37,4 @@ func GetUserIDFromCookies(r *http.Request) (uuid.UUID, error) {
 
 	fmt.Println(userID)
 	return userID, nil
-	//return uuid.Parse("77cd1069-5ed9-4fce-8867-4b6829298936")
 }
