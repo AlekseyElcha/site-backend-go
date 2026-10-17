@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 	"site-backend-go/internal/db"
 	"site-backend-go/internal/dtos"
@@ -15,7 +14,7 @@ import (
 
 type TicketStorage interface {
 	GetTicketInfoByID(ctx context.Context, id uuid.UUID) (*db.TicketInfoModel, error)
-	GetAllTicketsInfo(ctx context.Context) ([]db.TicketInfoModel, error)
+	GetAllTicketsInfo(ctx context.Context) ([]db.TicketGeneralInfoModel, error)
 	GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) ([]db.TicketGeneralInfoModel, error)
 	CreateTicket(ctx context.Context, model db.CreateTicketModel) (uuid.UUID, error)
 	UpdateTicketStatus(ctx context.Context, model db.UpdateTicketStatusModel) error
@@ -24,6 +23,7 @@ type TicketStorage interface {
 	LogTicketOperation(ctx context.Context, model db.TicketLogModel) error
 	GetAnswerForTicketByID(ctx context.Context, id uuid.UUID) (*db.TicketAnswersModel, error)
 	GetExtraMessagesForTicketByID(ctx context.Context, id uuid.UUID) ([]db.ExtraMessageInfoModel, error)
+	SearchForTickets(ctx context.Context, userID string, userRole string, searchingFor string) ([]db.TicketGeneralInfoModel, error)
 }
 type TicketService struct {
 	storage TicketStorage
@@ -37,36 +37,75 @@ func NewTicketService(storage TicketStorage, log *slog.Logger) *TicketService {
 	}
 }
 
-func (s *TicketService) GetAllTickets(ctx context.Context) ([]db.TicketInfoModel, error) {
+func (s *TicketService) GetAllTickets(ctx context.Context) ([]dtos.TicketGeneralInfo, error) {
 	tickets, err := s.storage.GetAllTicketsInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return tickets, nil
+	dtosResult := make([]dtos.TicketGeneralInfo, 0, len(tickets))
+
+	for _, ticket := range tickets {
+		dtosResult = append(dtosResult, dtos.TicketGeneralInfo{
+			ID:        ticket.ID,
+			UserID:    ticket.UserID,
+			CreatedAt: ticket.CreatedAt,
+			Name:      ticket.Name,
+			Email:     ticket.Email,
+			Address:   ticket.Address,
+			Status:    ticket.Status,
+		})
+	}
+
+	return dtosResult, nil
 }
 
-func (s *TicketService) GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) ([]db.TicketGeneralInfoModel, error) {
+func (s *TicketService) GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) ([]dtos.TicketGeneralInfo, error) {
 	tickets, err := s.storage.GetAllTicketsByUserID(ctx, userID)
-	fmt.Println(tickets)
 	if err != nil {
 		return nil, err
 	}
 
-	return tickets, nil
+	var ticketsInfo []dtos.TicketGeneralInfo
+	for _, ticket := range tickets {
+		ticketsInfo = append(ticketsInfo, dtos.TicketGeneralInfo{
+			ID:        ticket.ID,
+			UserID:    ticket.UserID,
+			CreatedAt: ticket.CreatedAt,
+			Name:      ticket.Name,
+			Email:     ticket.Email,
+			Address:   ticket.Address,
+			Status:    ticket.Status,
+		})
+	}
+
+	return ticketsInfo, nil
 }
 
-func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (*db.TicketInfoModel, error) {
+func (s *TicketService) GetTicket(ctx context.Context, id uuid.UUID) (*dtos.TicketDetailedInfoResponse, error) {
 	t, err := s.storage.GetTicketInfoByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return t, nil
+	dtosResponse := dtos.TicketDetailedInfoResponse{
+		ID:          t.ID,
+		UserID:      t.UserID,
+		Name:        t.Name,
+		Email:       t.Email,
+		Address:     t.Address,
+		PhoneNumber: t.PhoneNumber,
+		CreatedAt:   t.CreatedAt,
+		Question:    t.Question,
+		Status:      t.Status,
+		FilesIDs:    t.Files,
+	}
+
+	return &dtosResponse, nil
 }
 
-func (s *TicketService) GetAnswers(ctx context.Context, id uuid.UUID) (*db.TicketAnswersModel, error) {
-	t, err := s.storage.GetAnswerForTicketByID(ctx, id)
+func (s *TicketService) GetAnswer(ctx context.Context, id uuid.UUID) (*dtos.TicketAnswerInfoResponse, error) {
+	answer, err := s.storage.GetAnswerForTicketByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, exceptions.ErrNotFound
@@ -74,10 +113,16 @@ func (s *TicketService) GetAnswers(ctx context.Context, id uuid.UUID) (*db.Ticke
 		return nil, err
 	}
 
-	return t, nil
+	answerInfo := dtos.TicketAnswerInfoResponse{
+		ID:          answer.ID,
+		CreatedAt:   answer.CreatedAt,
+		MessageText: answer.AnswerText,
+		FilesIDs:    answer.Files,
+	}
+	return &answerInfo, nil
 }
 
-func (s *TicketService) GetExtraMessages(ctx context.Context, id uuid.UUID) ([]db.ExtraMessageInfoModel, error) {
+func (s *TicketService) GetExtraMessages(ctx context.Context, id uuid.UUID) ([]dtos.TicketExtraMessageInfo, error) {
 	em, err := s.storage.GetExtraMessagesForTicketByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -85,7 +130,37 @@ func (s *TicketService) GetExtraMessages(ctx context.Context, id uuid.UUID) ([]d
 		}
 	}
 
-	return em, nil
+	dtosResponse := make([]dtos.TicketExtraMessageInfo, 0, len(em))
+
+	for _, m := range em {
+		var attachedFiles []dtos.TicketAttachedFileInfo
+		if m.Files != nil {
+			attachedFiles = make([]dtos.TicketAttachedFileInfo, 0, len(m.Files))
+			for _, file := range m.Files {
+				attachedFiles = append(attachedFiles, dtos.TicketAttachedFileInfo{
+					FileID:           file.FileID,
+					UploaderID:       file.UploaderID,
+					OriginalFilename: file.OriginalFilename,
+					UploadedAt:       file.UploadedAt,
+				})
+			}
+		} else {
+			attachedFiles = make([]dtos.TicketAttachedFileInfo, 0)
+		}
+
+		msg := dtos.TicketExtraMessageInfo{
+			ID:          m.ID,
+			TicketID:    m.TicketID,
+			SenderID:    m.SenderID,
+			SenderRole:  m.SenderRole,
+			MessageText: m.MessageText,
+			Files:       attachedFiles,
+		}
+
+		dtosResponse = append(dtosResponse, msg)
+	}
+
+	return dtosResponse, nil
 }
 
 func (s *TicketService) Create(ctx context.Context, t dtos.TicketCreateRequest, userID uuid.UUID) error {
@@ -163,6 +238,7 @@ func (s *TicketService) Answer(ctx context.Context, ta dtos.TicketAnswerRequest,
 	dbModel := db.AnswerTicketModel{
 		ID:         ta.TicketID,
 		AnswerText: ta.AnswerText,
+		FilesIDs:   &ta.FilesIDs,
 	}
 
 	if err := s.storage.AnswerTicket(dbCtx, dbModel, senderID); err != nil {
@@ -172,7 +248,7 @@ func (s *TicketService) Answer(ctx context.Context, ta dtos.TicketAnswerRequest,
 	dbLogModel := db.TicketLogModel{
 		TicketID:  ta.TicketID,
 		ChangedBy: senderID,
-		Action:    "Обновлён статус обращения",
+		Action:    "Отправлен ответ на обращение",
 	}
 
 	err := s.storage.LogTicketOperation(dbCtx, dbLogModel)
@@ -211,4 +287,31 @@ func (s *TicketService) CreateExtraMessage(ctx context.Context, em dtos.ExtraMes
 	}
 
 	return nil
+}
+
+func (s *TicketService) FindSuitableTicketsFilter(ctx context.Context, userID string, userRole string, searchFor string) ([]dtos.TicketGeneralInfo, error) {
+	detachedCtx := context.WithoutCancel(ctx)
+	dbCtx, cancel := context.WithTimeout(detachedCtx, 15*time.Second)
+	defer cancel()
+
+	ticketsFound, err := s.storage.SearchForTickets(dbCtx, userID, userRole, searchFor)
+	if err != nil {
+		return nil, err
+	}
+
+	dtosResult := make([]dtos.TicketGeneralInfo, 0, len(ticketsFound))
+
+	for _, ticket := range ticketsFound {
+		dtosResult = append(dtosResult, dtos.TicketGeneralInfo{
+			ID:        ticket.ID,
+			UserID:    ticket.UserID,
+			CreatedAt: ticket.CreatedAt,
+			Name:      ticket.Name,
+			Email:     ticket.Email,
+			Address:   ticket.Address,
+			Status:    ticket.Status,
+		})
+	}
+
+	return dtosResult, nil
 }
