@@ -36,13 +36,14 @@ func (s *Server) FindSuitableStreetsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(response)
+	data, err := json.Marshal(response)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "internal server error"}`))
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+
+	w.Write(data)
 }
 
 func (s *Server) FindSuitableHousesHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,15 +52,14 @@ func (s *Server) FindSuitableHousesHandler(w http.ResponseWriter, r *http.Reques
 	selectedStreetName := r.URL.Query().Get("street")
 	targetHouseName := r.URL.Query().Get("number")
 
+	w.Header().Set("Content-Type", "application/json")
 	houses, err := s.AddressesService.GetHousesAlike(ctx, selectedStreetName, targetHouseName)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
 		if errors.Is(err, exceptions.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(`{"message": "Подходящие дома не найдены."}`))
 			return
 		}
-		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "internal server error"}`))
 		return
 	}
@@ -74,13 +74,14 @@ func (s *Server) FindSuitableHousesHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(response)
+	data, err := json.Marshal(response)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "internal server error"}`))
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+
+	w.Write(data)
 }
 
 func (s *Server) FindSuitableAddressesHandler(w http.ResponseWriter, r *http.Request) {
@@ -90,16 +91,15 @@ func (s *Server) FindSuitableAddressesHandler(w http.ResponseWriter, r *http.Req
 	selectedHouseName := r.URL.Query().Get("house")
 	targetEntrance := r.URL.Query().Get("entrance")
 
+	w.Header().Set("Content-Type", "application/json")
 	addresses, err := s.AddressesService.GetAddressesAlike(ctx, selectedStreetName, selectedHouseName, targetEntrance)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
 		if errors.Is(err, exceptions.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"message": "Подходящие адреса не найдены."}`))
+			w.Write([]byte(`{"message": "Подходящие адреса не найдены. Проверьте правильность написания."}`))
 			return
 		}
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "internal server error"}`))
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -114,10 +114,11 @@ func (s *Server) FindSuitableAddressesHandler(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=1800")
-	err = json.NewEncoder(w).Encode(response)
+	data, err := json.Marshal(response)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "internal server error"}`))
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+
+	w.Write(data)
 }
