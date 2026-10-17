@@ -17,36 +17,31 @@ var validate = validator.New()
 
 func (s *Server) GetAllTicketsInfoHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := r.Context().Value("userID").(uuid.UUID)
-	fmt.Println(userID)
 
 	tickets, err := s.TicketService.GetAllTickets(ctx)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		if errors.Is(err, exceptions.ErrUnauthorized) {
+			s.WriteError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		if errors.Is(err, exceptions.ErrForbidden) {
+			s.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	if tickets == nil || len(tickets) == 0 {
-		WriteJSONMessage(w, http.StatusNotFound, "Обращения не найдены.")
+		s.WriteJSONMessage(w, http.StatusNotFound, "Обращения не найдены.")
 		return
 	}
 
-	response := make([]dtos.TicketGetResponse, len(tickets))
-	for i, t := range tickets {
-		response[i] = dtos.TicketGetResponse{
-			ID:          t.ID,
-			UserID:      t.UserID,
-			Name:        t.Name,
-			Email:       t.Email,
-			Address:     t.Address,
-			PhoneNumber: t.PhoneNumber,
-			CreatedAt:   t.CreatedAt,
-			Question:    t.Question,
-			Status:      t.Status,
-			FilesIDs:    t.Files,
-		}
+	response := dtos.ItemResponse[dtos.TicketGeneralInfo]{
+		Items: tickets,
 	}
-
-	WriteJSON(w, http.StatusOK, response)
+	s.WriteJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetTicketInfoByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -54,138 +49,124 @@ func (s *Server) GetTicketInfoByIDHandler(w http.ResponseWriter, r *http.Request
 
 	idStr := r.PathValue("id")
 	if idStr == "" {
-		WriteError(w, http.StatusBadRequest, "id is required")
+		s.WriteError(w, http.StatusBadRequest, "id is required")
 		return
 	}
 
 	ticketID, err := uuid.Parse(idStr)
 	fmt.Println("ticketID:", ticketID)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "id is not valid")
+		s.WriteError(w, http.StatusBadRequest, "id is not valid")
 		return
 	}
 
-	t, err := s.TicketService.GetTicket(ctx, ticketID)
+	ticket, err := s.TicketService.GetTicket(ctx, ticketID)
 	if err != nil {
+		if errors.Is(err, exceptions.ErrForbidden) {
+			s.WriteJSON(w, http.StatusForbidden, "forbidden")
+		}
 		if errors.Is(err, exceptions.ErrNotFound) {
-			WriteJSONMessage(w, http.StatusNotFound, "Обращение не найдено.")
+			s.WriteJSONMessage(w, http.StatusNotFound, "Обращение не найдено.")
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	var extraMessages []dtos.TicketExtraMessageInfo
-	var answerInfo *dtos.TicketAnswerInfoResponse
+	filesIDs := ticket.FilesIDs
+	ticket.FilesIDs = nil
 
-	answer, err := s.TicketService.GetAnswers(ctx, t.ID)
+	answer, err := s.TicketService.GetAnswer(ctx, ticket.ID)
 	if err != nil {
 		if errors.Is(err, exceptions.ErrNotFound) {
 			answer = nil
-		} else {
-			WriteError(w, http.StatusInternalServerError, "internal server error")
-			return
 		}
 	}
 
 	extraMsgs, err := s.TicketService.GetExtraMessages(ctx, ticketID)
 	if err != nil {
 		if !errors.Is(err, exceptions.ErrNotFound) {
-			WriteError(w, http.StatusInternalServerError, "internal server error")
+			s.WriteError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 		extraMsgs = nil
 	}
 
-	for _, m := range extraMsgs {
-		msg := dtos.TicketExtraMessageInfo{
-			ID:          m.ID,
-			TicketID:    m.TicketID,
-			SenderID:    m.SenderID,
-			SenderRole:  m.SenderRole,
-			MessageText: m.MessageText,
-			FilesID:     m.FilesID,
-		}
-
-		extraMessages = append(extraMessages, msg)
+	files, err := s.FileService.GetMultipleFilesInfo(ctx, filesIDs)
+	if err != nil {
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
+		fmt.Printf(err.Error())
+		return
 	}
 
-	if answer != nil {
-		answerInfo = &dtos.TicketAnswerInfoResponse{
-			ID:          answer.ID,
-			CreatedAt:   answer.CreatedAt,
-			MessageText: answer.AnswerText,
-		}
-	} else {
-		answerInfo = nil
+	filesResponse := dtos.ItemResponse[dtos.FileDetailsInfo]{
+		Items: files,
+	}
+
+	extraMsgsResponse := dtos.ItemResponse[dtos.TicketExtraMessageInfo]{
+		Items: extraMsgs,
 	}
 
 	response := dtos.TicketGetResponse{
-		ID:            t.ID,
-		UserID:        t.UserID,
-		Name:          t.Name,
-		Email:         t.Email,
-		Address:       t.Address,
-		PhoneNumber:   t.PhoneNumber,
-		CreatedAt:     t.CreatedAt,
-		Question:      t.Question,
-		Status:        t.Status,
-		FilesIDs:      t.Files,
-		Answer:        answerInfo,
-		ExtraMessages: &extraMessages,
+		Info:          ticket,
+		Files:         &filesResponse,
+		ExtraMessages: &extraMsgsResponse,
+		Answers:       answer,
 	}
 
-	WriteJSON(w, http.StatusOK, response)
+	s.WriteJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetTicketsByUserIDHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	requesterID, okID := ctx.Value(middleware.UserIDKey).(uuid.UUID)
+	requesterRole, okRole := ctx.Value(middleware.UserRoleKey).(string)
+	if !okID || !okRole {
+		s.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	userIDStr := r.PathValue("user_id")
 	if userIDStr == "" {
-		WriteError(w, http.StatusBadRequest, "user_id is required")
+		s.WriteError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+
+	requesterIDStr := requesterID.String()
+
+	if requesterIDStr != userIDStr && requesterRole != "admin" {
+		s.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "user_id is not valid")
+		s.WriteError(w, http.StatusBadRequest, "user_id is not valid")
 		return
 	}
 
 	tickets, err := s.TicketService.GetAllTicketsByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, exceptions.ErrNotFound) {
-			WriteJSONMessage(w, http.StatusNotFound, "Обращения не найдены.")
+			s.WriteJSONMessage(w, http.StatusNotFound, "Обращения не найдены.")
 			return
 		}
 		fmt.Println("Реальная ошибка SQL:", err)
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	if tickets == nil || len(tickets) == 0 {
-		WriteError(w, http.StatusNotFound, "Обращения не найдены.")
+		s.WriteError(w, http.StatusNotFound, "Обращения не найдены.")
 		return
 	}
 
-	var ticketsInfo []dtos.TicketGeneralInfo
-	for _, ticket := range tickets {
-		ticketsInfo = append(ticketsInfo, dtos.TicketGeneralInfo{
-			ID:          ticket.ID,
-			UserID:      ticket.UserID,
-			CreatedAt:   ticket.CreatedAt,
-			Name:        ticket.Name,
-			Email:       ticket.Email,
-			PhoneNumber: ticket.PhoneNumber,
-			Address:     ticket.Address,
-			Question:    ticket.Question,
-			Files:       ticket.Files,
-			Status:      ticket.Status,
-		})
+	response := dtos.ItemResponse[dtos.TicketGeneralInfo]{
+		Items: tickets,
 	}
 
-	WriteJSON(w, http.StatusOK, ticketsInfo)
+	s.WriteJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +178,7 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := decoder.Decode(&t)
 	if err := validate.Struct(t); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed %s", err.Error()))
 		return
 	}
 
@@ -205,7 +186,7 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = s.TicketService.Create(ctx, t, userID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -221,16 +202,16 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("[ОШИБКА EMAIL] Не удалось отправить письмо для %s: %v\n", emailID, err)
 	}
 
-	WriteJSONMessage(w, http.StatusCreated, "Вопрос успешно создан!")
+	s.WriteJSONMessage(w, http.StatusCreated, "Вопрос успешно создан!")
 	return
 }
 
 func (s *Server) UpdateTicketStatusByIDHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := ctx.Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -240,30 +221,30 @@ func (s *Server) UpdateTicketStatusByIDHandler(w http.ResponseWriter, r *http.Re
 
 	err := decoder.Decode(&ts)
 	if err := validate.Struct(ts); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	err = s.TicketService.UpdateStatus(ctx, ts, userID)
 	if err != nil {
 		if errors.Is(err, exceptions.ErrNotFound) {
-			WriteError(w, http.StatusNotFound, "Обращение не найдено.")
+			s.WriteError(w, http.StatusNotFound, "Обращение не найдено.")
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	_, err = s.EmailSenderService.Send(r.Context(),
 		[]string{"test@test.com"},
-		"Создание обращения",
-		"Вы успешно создали обращение на платформе.",
+		"Изменение статуса обращения.",
+		"Статус обращения был изменён.", // TODO
 	)
 	if err != nil {
 		s.Logger.Error(err.Error())
 	}
 
-	WriteJSONMessage(w, http.StatusCreated, "Статус вопроса успешно обновлён!")
+	s.WriteJSONMessage(w, http.StatusCreated, "Статус вопроса успешно обновлён!")
 	return
 }
 
@@ -272,7 +253,7 @@ func (s *Server) AnswerTicketByIDHandler(w http.ResponseWriter, r *http.Request)
 
 	senderID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -282,26 +263,26 @@ func (s *Server) AnswerTicketByIDHandler(w http.ResponseWriter, r *http.Request)
 
 	err := decoder.Decode(&ta)
 	if err := validate.Struct(ta); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	err = s.TicketService.Answer(ctx, ta, senderID)
 	if err != nil {
 		fmt.Println("Service error:", err)
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	WriteJSONMessage(w, http.StatusOK, "Ответ на вопрос успешно создан!")
+	s.WriteJSONMessage(w, http.StatusOK, "Ответ на вопрос успешно создан!")
 }
 
 func (s *Server) CreateExtraMessageHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	senderID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	senderID, ok := ctx.Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -310,26 +291,26 @@ func (s *Server) CreateExtraMessageHandler(w http.ResponseWriter, r *http.Reques
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&em); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	if err := validate.Struct(em); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	err := s.TicketService.CreateExtraMessage(ctx, em, senderID)
 	if err != nil {
 		if errors.Is(err, exceptions.ErrNotFound) {
-			WriteError(w, http.StatusNotFound, "Обращение не найдено.")
+			s.WriteError(w, http.StatusNotFound, "Обращение не найдено.")
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	WriteJSONMessage(w, http.StatusCreated, "Дополнительное сообщение успешно создано!")
+	s.WriteJSONMessage(w, http.StatusCreated, "Дополнительное сообщение успешно создано!")
 }
 
 func (s *Server) GetExtraMessagesForTicketByID(w http.ResponseWriter, r *http.Request) {
@@ -340,25 +321,75 @@ func (s *Server) GetExtraMessagesForTicketByID(w http.ResponseWriter, r *http.Re
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	if err := validate.Struct(req); err != nil {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
 		return
 	}
 
 	extraMessages, err := s.TicketService.GetExtraMessages(ctx, req.TicketID)
+
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		if errors.Is(err, exceptions.ErrUnauthorized) {
+			s.WriteError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if errors.Is(err, exceptions.ErrForbidden) {
+			s.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	err = json.NewEncoder(w).Encode(extraMessages)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	WriteJSON(w, http.StatusOK, extraMessages)
+	s.WriteJSON(w, http.StatusOK, extraMessages)
+}
+
+func (s *Server) SearchTicketsAlikeHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		s.WriteError(w, http.StatusInternalServerError, "authentication issue")
+		return
+	}
+
+	userRole, ok := r.Context().Value(middleware.UserRoleKey).(string)
+	if !ok {
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	ctx := r.Context()
+
+	queryParams := r.URL.Query()
+	searchFor := queryParams.Get("search")
+	searchForInput := dtos.TicketAlikeSearch{
+		InputData: searchFor,
+	}
+
+	if err := validate.Struct(searchForInput); err != nil {
+		s.WriteError(w, http.StatusBadRequest, fmt.Sprintf("validation failed: %s", err.Error()))
+		return
+	}
+
+	userIDStr := userID.String()
+	ticketsFound, err := s.TicketService.FindSuitableTicketsFilter(ctx, userIDStr, userRole, searchForInput.InputData)
+	if err != nil {
+		if errors.Is(err, exceptions.ErrDBError) {
+			s.WriteError(w, http.StatusInternalServerError, "internal server error")
+		}
+	}
+
+	response := dtos.ItemResponse[dtos.TicketGeneralInfo]{
+		Items: ticketsFound,
+	}
+	s.WriteJSON(w, http.StatusOK, response)
 }
