@@ -3,12 +3,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"site-backend-go/internal/exceptions"
 	"uuid"
 )
 
-func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketInfoModel, error) {
+func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketGeneralInfoModel, error) {
 	query := `
 		SELECT
 			id
@@ -17,9 +18,6 @@ func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketInfoModel, err
 			, created_at
 			, email
 			, address
-			, phone_number
-			, question
-			, files
 			, status
 		FROM tickets
 	`
@@ -29,10 +27,10 @@ func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketInfoModel, err
 	}
 	defer rows.Close()
 
-	var Tickets []TicketInfoModel
+	var Tickets []TicketGeneralInfoModel
 
 	for rows.Next() {
-		var t TicketInfoModel
+		var t TicketGeneralInfoModel
 		err := rows.Scan(
 			&t.ID,
 			&t.UserID,
@@ -40,9 +38,6 @@ func (s *Storage) GetAllTicketsInfo(ctx context.Context) ([]TicketInfoModel, err
 			&t.CreatedAt,
 			&t.Email,
 			&t.Address,
-			&t.PhoneNumber,
-			&t.Question,
-			&t.Files,
 			&t.Status,
 		)
 		if err != nil {
@@ -105,9 +100,9 @@ func (s *Storage) GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) (
 			, created_at
 			, email
 			, address
-			, phone_number
-			, question
-			, files
+-- 			, phone_number
+-- 			, question
+-- 			, files
 			, status
 		FROM tickets
 		WHERE user_id = $1;
@@ -133,9 +128,6 @@ func (s *Storage) GetAllTicketsByUserID(ctx context.Context, userID uuid.UUID) (
 			&t.CreatedAt,
 			&t.Email,
 			&t.Address,
-			&t.PhoneNumber,
-			&t.Question,
-			&t.Files,
 			&t.Status,
 		)
 		if err != nil {
@@ -154,11 +146,11 @@ func (s *Storage) GetAnswerForTicketByID(ctx context.Context, id uuid.UUID) (*Ti
 		    , sender_id
 		    , ticket_id
 		    , answer_text
+		 	, files
 		    , created_at
 		FROM answers
 		WHERE ticket_id = $1;
 	`
-
 	var ans TicketAnswersModel
 
 	err := s.db.QueryRow(
@@ -168,6 +160,7 @@ func (s *Storage) GetAnswerForTicketByID(ctx context.Context, id uuid.UUID) (*Ti
 		&ans.SenderID,
 		&ans.TicketID,
 		&ans.AnswerText,
+		&ans.Files,
 		&ans.CreatedAt,
 	)
 
@@ -181,15 +174,27 @@ func (s *Storage) GetAnswerForTicketByID(ctx context.Context, id uuid.UUID) (*Ti
 func (s *Storage) GetExtraMessagesForTicketByID(ctx context.Context, id uuid.UUID) ([]ExtraMessageInfoModel, error) { // TODO: пересмотреть
 	query := `
 		SELECT 
-		    m.id
-		 	, m.sender_id
-		 	, m.ticket_id
-		    , m.message_text
-			, m.files
-			, u.role as sender_role
-		FROM extra_messages m
-		JOIN users u ON m.sender_id = u.id
-		WHERE m.ticket_id = $1;
+		m.id,
+		m.sender_id,
+		m.ticket_id,
+		m.message_text,
+		u.role AS sender_role,
+		COALESCE(
+			json_agg(
+				json_build_object(
+					'file_id', f.id,
+					'uploader_id', f.uploader_id,
+					'original_filename', f.original_filename,
+					'uploaded_at', f.uploaded_at
+				)
+			) FILTER (WHERE f.id IS NOT NULL), 
+			'[]'
+   		) AS files
+	FROM extra_messages m
+	JOIN users u ON m.sender_id = u.id
+	LEFT JOIN files f ON f.id = ANY(m.files)
+	WHERE m.ticket_id = $1
+	GROUP BY m.id, u.role;		
 	`
 
 	rows, err := s.db.Query(query, id)
@@ -202,16 +207,20 @@ func (s *Storage) GetExtraMessagesForTicketByID(ctx context.Context, id uuid.UUI
 
 	for rows.Next() {
 		var msg ExtraMessageInfoModel
+		var filesJSON []byte
 
 		err = rows.Scan(
 			&msg.ID,
 			&msg.SenderID,
 			&msg.TicketID,
 			&msg.MessageText,
-			&msg.FilesID,
 			&msg.SenderRole,
+			&filesJSON,
 		)
 		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(filesJSON, &msg.Files); err != nil {
 			return nil, err
 		}
 
@@ -298,10 +307,10 @@ func (s *Storage) AnswerTicket(ctx context.Context, model AnswerTicketModel, sen
 	defer tx.Rollback()
 
 	insertQuery := `
-		INSERT INTO answers (sender_id, ticket_id, answer_text)
-		VALUES ($1, $2, $3)`
+		INSERT INTO answers (sender_id, ticket_id, answer_text, files)
+		VALUES ($1, $2, $3, $4)`
 
-	_, err = tx.Exec(insertQuery, senderID, model.ID, model.AnswerText)
+	_, err = tx.Exec(insertQuery, senderID, model.ID, model.AnswerText, model.FilesIDs)
 	if err != nil {
 		return err
 	}
@@ -359,4 +368,62 @@ func (s *Storage) LogTicketOperation(ctx context.Context, model TicketLogModel) 
 	}
 
 	return nil
+}
+
+func (s *Storage) SearchForTickets(ctx context.Context, userID string, userRole string, searchingFor string) ([]TicketGeneralInfoModel, error) {
+	query := `
+		SELECT
+		    id
+			, user_id
+			, name
+			, created_at
+			, email
+			, address
+			, status
+		FROM tickets
+		WHERE
+		    ($2 = 'admin' AND (
+		        name ILIKE $3
+				OR email ILIKE $3
+				OR phone_number ILIKE $3
+				OR address ILIKE $3
+				OR question ILIKE $3
+		    ))
+		    OR
+			($2 != 'admin' AND user_id = $1)
+		ORDER BY created_at DESC
+	`
+
+	searchingForFormatted := "%" + searchingFor + "%"
+	rows, err := s.db.QueryContext(ctx, query, userID, userRole, searchingForFormatted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	suitableTickets := make([]TicketGeneralInfoModel, 0)
+	for rows.Next() {
+		var ticketInfo TicketGeneralInfoModel
+		err := rows.Scan(
+			&ticketInfo.ID,
+			&ticketInfo.UserID,
+			&ticketInfo.Name,
+			&ticketInfo.CreatedAt,
+			&ticketInfo.Email,
+			&ticketInfo.Address,
+			&ticketInfo.Status,
+		)
+		if err != nil {
+			s.log.Error("Error while Scanning suitable ticket", "err", err)
+			return nil, exceptions.ErrDBError
+		}
+		suitableTickets = append(suitableTickets, ticketInfo)
+	}
+
+	if err := rows.Err(); err != nil {
+		s.log.Error("rows error after iteration", "err", err)
+		return nil, exceptions.ErrDBError
+	}
+
+	return suitableTickets, err
 }
