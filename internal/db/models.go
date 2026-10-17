@@ -44,6 +44,7 @@ type UpdateTicketStatusModel struct {
 type AnswerTicketModel struct {
 	ID         uuid.UUID
 	AnswerText string
+	FilesIDs   *[]uuid.UUID
 }
 
 type TicketAnswersInfo struct {
@@ -67,24 +68,22 @@ type TicketInfoModel struct {
 }
 
 type TicketGeneralInfoModel struct {
-	ID          uuid.UUID
-	UserID      uuid.UUID
-	CreatedAt   time.Time
-	Name        string
-	Email       string
-	PhoneNumber string
-	Address     string
-	Question    string
-	Files       []uuid.UUID
-	Status      string
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CreatedAt time.Time
+	Name      string
+	Email     string
+	Address   string
+	Status    string
 }
 
 type TicketAnswersModel struct {
-	ID         uuid.UUID `db:"id"`
-	SenderID   uuid.UUID `db:"sender_id"`
-	TicketID   uuid.UUID `db:"ticket_id"`
-	AnswerText string    `db:"answer_text"`
-	CreatedAt  time.Time `db:"created_at"`
+	ID         uuid.UUID   `db:"id"`
+	SenderID   uuid.UUID   `db:"sender_id"`
+	TicketID   uuid.UUID   `db:"ticket_id"`
+	AnswerText string      `db:"answer_text"`
+	Files      []uuid.UUID `db:"files"`
+	CreatedAt  time.Time   `db:"created_at"`
 }
 
 type TicketExtraMessagesModel struct {
@@ -101,13 +100,20 @@ type ExtraMessageModel struct {
 	FilesID     []uuid.UUID
 }
 
+type AttachedFileModel struct {
+	FileID           string    `json:"file_id"`
+	UploaderID       string    `json:"uploader_id"`
+	OriginalFilename string    `json:"original_filename"`
+	UploadedAt       time.Time `json:"uploaded_at"`
+}
+
 type ExtraMessageInfoModel struct {
-	ID          uuid.UUID   `db:"id"`
-	TicketID    uuid.UUID   `db:"ticket_id"`
-	SenderID    uuid.UUID   `db:"sender_id"`
-	SenderRole  string      `db:"sender_role"`
-	MessageText string      `db:"message_text"`
-	FilesID     []uuid.UUID `db:"files_id"`
+	ID          uuid.UUID           `db:"id"`
+	TicketID    uuid.UUID           `db:"ticket_id"`
+	SenderID    uuid.UUID           `db:"sender_id"`
+	SenderRole  string              `db:"sender_role"`
+	MessageText string              `db:"message_text"`
+	Files       []AttachedFileModel `db:"files"`
 }
 
 type TicketLogModel struct {
@@ -126,4 +132,11 @@ type HouseAlikeModel struct {
 
 type AddressAlikeModel struct {
 	FullAddress string `db:"full_address"`
+}
+
+type FileInfoModel struct {
+	FileID           uuid.UUID `db:"id"`
+	UploaderID       uuid.UUID `db:"uploader_id"`
+	OriginalFilename string    `db:"original_filename"`
+	UploadedAt       string    `db:"uploaded_at"`
 }
