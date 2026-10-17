@@ -67,16 +67,17 @@ func InitDB(connString string) (*sql.DB, error) {
 	    sender_id UUID NOT NULL,
 		ticket_id UUID NOT NULL,
 		answer_text TEXT NOT NULL,
+	    files UUID[] DEFAULT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		CONSTRAINT fk_ticket 
 			FOREIGN KEY (ticket_id) 
-			REFERENCES tickets(id) 
+			REFERENCES tickets(id)
 	);
 
 	CREATE TABLE IF NOT EXISTS files (
 	    id UUID NOT NULL PRIMARY KEY,
-	    extension TEXT DEFAULT NULL,
 	    uploader_id UUID NOT NULL,
+	    original_filename TEXT NOT NULL,
 	    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 	
