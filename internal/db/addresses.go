@@ -102,11 +102,9 @@ func (s *Storage) FindSuitableAddressesAlike(
 		WHERE
 			a.street ILIKE $1
 			AND a.house = $2
-		    -- AND a.house ILIKE $2
 			AND a.entrance ILIKE $3
 	`
 	formattedInputStreet := "%" + selectedStreet + "%"
-	// formattedInputHouse := "%" + selectedHouse + "%"
 	formattedInputHouse := selectedHouse
 	formattedInputEntrance := "%" + entranceInput + "%"
 
