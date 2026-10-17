@@ -20,6 +20,7 @@ type Config struct {
 
 	Mode struct {
 		IsLocal bool `env:"APP_IS_LOCAL" envDefault:"false"`
+		IsProd  bool `env:"APP_IS_PROD" envDefault:"false"`
 	}
 
 	DB struct {
