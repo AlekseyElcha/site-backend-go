@@ -18,7 +18,12 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-const UserIDKey string = "userID"
+type ContextKey string
+
+const (
+	UserIDKey   ContextKey = "userID"
+	UserRoleKey ContextKey = "userRole"
+)
 
 func (mm *MiddlewareManager) AuthCheckMiddleware(reqRoles []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -47,6 +52,7 @@ func (mm *MiddlewareManager) AuthCheckMiddleware(reqRoles []string) func(http.Ha
 			}
 
 			userID := claims.UserID
+			userRole := claims.Role
 
 			if !slices.Contains(reqRoles, claims.Role) {
 				w.WriteHeader(http.StatusForbidden)
@@ -55,6 +61,7 @@ func (mm *MiddlewareManager) AuthCheckMiddleware(reqRoles []string) func(http.Ha
 			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			ctx = context.WithValue(ctx, UserRoleKey, userRole)
 			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
