@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"site-backend-go/internal/config"
 	"site-backend-go/internal/dtos"
 	"site-backend-go/internal/redis_client"
 	"site-backend-go/internal/service"
@@ -26,12 +27,14 @@ var (
 )
 
 type AuthHandler struct {
+	config      *config.Config
 	userService *service.UserService
 	rdb         *redis_client.RedisClient
 }
 
-func NewAuthHandler(rdb *redis_client.RedisClient, userService *service.UserService) *AuthHandler {
+func NewAuthHandler(config *config.Config, rdb *redis_client.RedisClient, userService *service.UserService) *AuthHandler {
 	return &AuthHandler{
+		config:      config,
 		userService: userService,
 		rdb:         rdb,
 	}
@@ -205,7 +208,7 @@ func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    accessTokenString,
 		Expires:  expirationTimeAccess,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.config.Mode.IsProd,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
@@ -215,7 +218,7 @@ func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    refreshTokenString,
 		Expires:  expirationTimeRefresh,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.config.Mode.IsProd,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/auth/refresh",
 	})
@@ -307,7 +310,7 @@ func (s *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.config.Mode.IsProd,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
