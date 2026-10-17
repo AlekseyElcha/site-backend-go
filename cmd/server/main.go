@@ -90,7 +90,7 @@ func main() {
 	emailSenderService := service.NewEmailSenderService(isLocalMode, resendKey, fromEmail)
 	filesService := service.NewFileService(uploadDir, dbStorage)
 	addressesService := service.NewAddressesService(dbStorage)
-	authHandlers := auth.NewAuthHandler(rdb, userService)
+	authHandlers := auth.NewAuthHandler(cfg, rdb, userService)
 
 	appServer := handlers.NewServer(
 		ticketService,
@@ -136,21 +136,21 @@ func main() {
 	))
 
 	// Обновление статуса обращения по его ID
-	mux.Handle("POST /api/v1/tickets/status/update", mm.AuthCheckMiddleware([]string{"admin"})(
+	mux.Handle("PUT /api/v1/tickets/status/update", mm.AuthCheckMiddleware([]string{"admin"})(
 		http.HandlerFunc(appServer.UpdateTicketStatusByIDHandler),
 	))
 
 	// Получение всех дполнительных сообщений пользователя по ID обращения
-	mux.Handle("POST /api/v1/extra_messages/get", mm.AuthCheckMiddleware([]string{"user", "admin"})(
-		http.HandlerFunc(appServer.GetExtraMessagesForTicketByID),
-	))
+	//mux.Handle("POST /api/v1/extra_messages/get", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+	//	http.HandlerFunc(appServer.GetExtraMessagesForTicketByID),
+	//))
 
 	// Создание дополнительного сообщения
 	mux.Handle("POST /api/v1/extra_messages/create", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.CreateExtraMessageHandler),
 	))
 
-	// Получение инормации о пользователе по его ID
+	// Получение информации о пользователе по его ID
 	mux.Handle("GET /api/v1/users/get/{id}", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 		http.HandlerFunc(appServer.GetUserInfoByIDHandler),
 	))
@@ -198,6 +198,11 @@ func main() {
 
 	// Полный поиск по улица + дом + подъезд
 	mux.HandleFunc("GET /api/v1/address/find/complete", appServer.FindSuitableAddressesHandler)
+
+	// Поиск по обращениям через ILIKE PostgreSQL, передача строки поиска через Query-parameter: search
+	mux.Handle("POST /api/v1/tickets/search", mm.AuthCheckMiddleware([]string{"user", "admin"})(
+		http.HandlerFunc(appServer.SearchTicketsAlikeHandler),
+	))
 
 	// Раздача фронта
 	mux.Handle("/", http.FileServer(http.Dir("./frontend")))
