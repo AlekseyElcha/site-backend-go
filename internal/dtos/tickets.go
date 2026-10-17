@@ -5,47 +5,61 @@ import (
 	"uuid"
 )
 
+type ItemResponse[T any] struct {
+	Items []T `json:"items"`
+}
+
 type TicketGetResponse struct {
-	ID            uuid.UUID                 `json:"id"`
-	UserID        uuid.UUID                 `json:"user_id"`
-	Name          string                    `json:"name"`
-	Email         string                    `json:"email"`
-	Address       string                    `json:"address"`
-	PhoneNumber   string                    `json:"phone_number"`
-	CreatedAt     time.Time                 `json:"created_at"`
-	Question      string                    `json:"question"`
-	Status        string                    `json:"status"`
-	FilesIDs      []uuid.UUID               `json:"files_ids"`
-	Answer        *TicketAnswerInfoResponse `json:"answer"`
-	ExtraMessages *[]TicketExtraMessageInfo `json:"extra_messages"` // TODO: пересмотреть
+	Info          *TicketDetailedInfoResponse           `json:"info"`
+	Files         *ItemResponse[FileDetailsInfo]        `json:"files"`
+	ExtraMessages *ItemResponse[TicketExtraMessageInfo] `json:"extra_messages"`
+	Answers       *TicketAnswerInfoResponse             `json:"answers"`
+}
+
+type TicketDetailedInfoResponse struct {
+	ID          uuid.UUID   `json:"id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	Name        string      `json:"name"`
+	Email       string      `json:"email"`
+	Address     string      `json:"address"`
+	PhoneNumber string      `json:"phone_number"`
+	CreatedAt   time.Time   `json:"created_at"`
+	Question    string      `json:"question"`
+	Status      string      `json:"status"`
+	FilesIDs    []uuid.UUID `json:"files_ids,omitempty"`
 }
 
 type TicketGeneralInfo struct {
-	ID          uuid.UUID   `json:"id"`
-	UserID      uuid.UUID   `json:"user_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	Name        string      `json:"name"`
-	Email       string      `json:"email"`
-	PhoneNumber string      `json:"phone_number"`
-	Address     string      `json:"address"`
-	Question    string      `json:"question"`
-	Files       []uuid.UUID `json:"files"`
-	Status      string      `json:"status"`
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Address   string    `json:"address"`
+	Status    string    `json:"status"`
 }
 
 type TicketAnswerInfoResponse struct { // TODO: пересмотреть
-	ID          uuid.UUID `json:"id"`
-	CreatedAt   time.Time `json:"created_at"`
-	MessageText string    `json:"answer_text"`
+	ID          uuid.UUID   `json:"id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	MessageText string      `json:"answer_text"`
+	FilesIDs    []uuid.UUID `json:"files_ids" validate:"omitempty"`
+}
+
+type TicketAttachedFileInfo struct {
+	FileID           string    `json:"file_id"`
+	UploaderID       string    `json:"uploader_id"`
+	OriginalFilename string    `json:"original_filename"`
+	UploadedAt       time.Time `json:"uploaded_at"`
 }
 
 type TicketExtraMessageInfo struct {
-	ID          uuid.UUID   `json:"id"`
-	TicketID    uuid.UUID   `json:"ticket_id"`
-	SenderID    uuid.UUID   `json:"sender_id"`
-	SenderRole  string      `json:"sender_role"`
-	MessageText string      `json:"message_text"`
-	FilesID     []uuid.UUID `json:"files_id"`
+	ID          uuid.UUID                `json:"id"`
+	TicketID    uuid.UUID                `json:"ticket_id"`
+	SenderID    uuid.UUID                `json:"sender_id"`
+	SenderRole  string                   `json:"sender_role"`
+	MessageText string                   `json:"message_text"`
+	Files       []TicketAttachedFileInfo `json:"files"`
 }
 
 type TicketCreateRequest struct {
@@ -63,8 +77,9 @@ type TicketStatusUpdateRequest struct {
 }
 
 type TicketAnswerRequest struct {
-	TicketID   uuid.UUID `json:"ticket_id" validate:"required"`
-	AnswerText string    `json:"answer_text" validate:"required"`
+	TicketID   uuid.UUID   `json:"ticket_id" validate:"required"`
+	AnswerText string      `json:"answer_text" validate:"required"`
+	FilesIDs   []uuid.UUID `json:"files_ids" validate:"omitempty"`
 }
 
 type ExtraMessagesGetRequest struct {
@@ -81,4 +96,8 @@ type HousesAlikeResponse struct {
 
 type AddressesAlikeResponse struct {
 	FullAddresses []string `json:"addresses"`
+}
+
+type TicketAlikeSearch struct {
+	InputData string `json:"search_for"`
 }
