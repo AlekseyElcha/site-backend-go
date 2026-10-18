@@ -27,16 +27,23 @@ var (
 )
 
 type AuthHandler struct {
-	config      *config.Config
-	userService *service.UserService
-	rdb         *redis_client.RedisClient
+	config       *config.Config
+	userService  *service.UserService
+	rdb          *redis_client.RedisClient
+	emailService service.EmailSenderService
 }
 
-func NewAuthHandler(config *config.Config, rdb *redis_client.RedisClient, userService *service.UserService) *AuthHandler {
+func NewAuthHandler(
+	config *config.Config,
+	rdb *redis_client.RedisClient,
+	userService *service.UserService,
+	emailService service.EmailSenderService,
+) *AuthHandler {
 	return &AuthHandler{
-		config:      config,
-		userService: userService,
-		rdb:         rdb,
+		config:       config,
+		userService:  userService,
+		rdb:          rdb,
+		emailService: emailService,
 	}
 }
 
@@ -124,6 +131,16 @@ func (s *AuthHandler) RequestAuthCodeHandler(w http.ResponseWriter, r *http.Requ
 		w.Write([]byte(`{"error": "internal server error"}`))
 		return
 	}
+
+	userEmail := m.Email
+	EmailID, err := s.emailService.Send(
+		r.Context(),
+		[]string{userEmail},
+		config.TicketCreatedSubjectForUser,
+		config.TicketCreatedMessageForUser,
+	)
+
+	fmt.Println(EmailID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

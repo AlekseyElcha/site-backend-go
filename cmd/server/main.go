@@ -90,7 +90,7 @@ func main() {
 	emailSenderService := service.NewEmailSenderService(isLocalMode, resendKey, fromEmail)
 	filesService := service.NewFileService(uploadDir, dbStorage)
 	addressesService := service.NewAddressesService(dbStorage)
-	authHandlers := auth.NewAuthHandler(cfg, rdb, userService)
+	authHandlers := auth.NewAuthHandler(cfg, rdb, userService, emailSenderService)
 
 	appServer := handlers.NewServer(
 		ticketService,
