@@ -10,22 +10,24 @@ services:
     restart: always
     expose:
       - "8080"
-    environment:
-      - APP_PORT
-      - DB_HOST
-      - DB_PORT
-      - DB_USER
-      - DB_PASSWORD
-      - DB_NAME
-      - REDIS_HOST
-      - REDIS_PORT
-      - REDIS_PASSWORD
-      - EMAIL_RESEND_API_KEY
-      - EMAIL_FROM
-      - LOG_LEVEL
-      - FILE_UPLOAD_DIR=/app/files
-      - APP_IS_LOCAL
-      - APP_IS_PROD
+#    environment:
+#      - APP_PORT
+#      - DB_HOST
+#      - DB_PORT
+#      - DB_USER
+#      - DB_PASSWORD
+#      - DB_NAME
+#      - REDIS_HOST
+#      - REDIS_PORT
+#      - REDIS_PASSWORD
+#      - EMAIL_RESEND_API_KEY
+#      - EMAIL_FROM
+#      - LOG_LEVEL
+#      - FILE_UPLOAD_DIR=/app/files
+#      - APP_IS_LOCAL
+#      - APP_IS_PROD
+    env_file:
+      - .env
     volumes:
       - app_files:/app/files 
     depends_on:
@@ -75,6 +77,8 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./main-site:/usr/share/nginx/html/main-site:ro
+      - ./frontend:/usr/share/nginx/html/frontend:ro
     depends_on:
       - site-backend-app
     networks:

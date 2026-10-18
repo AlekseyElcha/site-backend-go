@@ -50,12 +50,9 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	var cfg Config
 
-	err := cleanenv.ReadConfig(".env", &cfg)
+	err := cleanenv.ReadEnv(&cfg)
 	if err != nil {
-		err = cleanenv.ReadEnv(".env")
-		if err != nil {
-			return nil, fmt.Errorf("error loading config: %s", err)
-		}
+		return nil, fmt.Errorf("error loading config: %w", err)
 	}
 
 	validate := validator.New()

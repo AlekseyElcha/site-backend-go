@@ -11,11 +11,28 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
   -o /app/compiled-project ./cmd/server/main.go
 
+#FROM alpine:latest
+#RUN apk --no-cache add ca-certificates tzdata
+#WORKDIR /root
+
+#COPY --from=builder /app/compiled-project .
+
+#EXPOSE 8080
+
+#CMD ["./compiled-project"]
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
-WORKDIR /root/
+
+WORKDIR /appnano Dockerfile.backend
+
+RUN mkdir -p certs files
 
 COPY --from=builder /app/compiled-project .
+
+COPY certs/private.pem ./certs/private.pem
+COPY certs/public.pem ./certs/public.pem
+
+COPY frontend ./frontend
 
 EXPOSE 8080
 
