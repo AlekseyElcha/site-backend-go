@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"site-backend-go/internal/config"
 	"site-backend-go/internal/dtos"
 	"site-backend-go/internal/exceptions"
 	"site-backend-go/internal/middleware"
@@ -192,15 +193,41 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 
 	userEmail := t.Email
 
-	emailID, err := s.EmailSenderService.Send(
+	//emailID, err := s.EmailSenderService.Send(
+	//	r.Context(),
+	//	[]string{userEmail},
+	//	"Создание обращения",
+	//	"<h1>Уважаемый</h1><p>Ваше обращение успешно обновлено!</p>",
+	//)
+
+	emailIDUser, errUser := s.EmailSenderService.Send(
 		r.Context(),
 		[]string{userEmail},
-		"Создание обращения",
-		"<h1>Статус изменен</h1><p>Ваше обращение успешно обновлено!</p>",
+		config.TicketCreatedSubjectForUser,
+		config.TicketCreatedMessageForUser,
 	)
-	if err != nil {
-		fmt.Printf("[ОШИБКА EMAIL] Не удалось отправить письмо для %s: %v\n", emailID, err)
+
+	emailIDAdmin, errAdmin := s.EmailSenderService.Send(
+		r.Context(),
+		config.AdminEmails,
+		config.TicketCreatedSubjectForAdmin,
+		config.TicketCreatedSubjectForAdmin,
+	)
+
+	if errUser != nil {
+		s.Logger.Error("error sending user email", "error", errUser.Error())
 	}
+
+	if errAdmin != nil {
+		s.Logger.Error("error sending admin email", "error", errAdmin.Error())
+	}
+
+	s.Logger.Info("email sent to user", "email", emailIDUser)
+	s.Logger.Info("email sent to admins", "email", emailIDAdmin)
+
+	//if err != nil {
+	//	fmt.Printf("[ОШИБКА EMAIL] Не удалось отправить письмо для %s: %v\n", emailID, err)
+	//}
 
 	s.WriteJSONMessage(w, http.StatusCreated, "Вопрос успешно создан!")
 	return
