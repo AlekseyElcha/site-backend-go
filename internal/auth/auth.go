@@ -133,11 +133,13 @@ func (s *AuthHandler) RequestAuthCodeHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	userEmail := m.Email
+	formattedMessage := fmt.Sprintf(config.AuthCodeSentMessage, authCodeStr)
+
 	EmailID, err := s.emailService.Send(
 		r.Context(),
 		[]string{userEmail},
-		config.TicketCreatedSubjectForUser,
-		config.TicketCreatedMessageForUser,
+		config.AuthCodeSentSubject,
+		formattedMessage,
 	)
 
 	fmt.Println(EmailID)

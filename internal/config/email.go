@@ -16,6 +16,9 @@ var (
 		"Ознакомиться с ним Вы можете на сайте ask.domofon-servis-odi.ru\n\n" +
 		"Это письмо было отправлено автоматически, просьба не отвечать на него."
 
+	AuthCodeSentSubject = "Код для входа на сайт"
+	AuthCodeSentMessage = "Код для входа на сайт: %s \n\n  Данное письмо было отправлено автоматически."
+
 	//ExtraMessageCreatedMessageForUser   = ""
 	//ExtraMessageCreatedMessageForAdmins = ""
 )
