@@ -1,32 +1,82 @@
 services:
+  site-backend-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        - VERSION=${VERSION:-unknown}
+        - BUILD_TIME=${BUILD_TIME:-unknown}
+    container_name: site-backend-app
+    restart: always
+    expose:
+      - "8080"
+    environment:
+      - APP_PORT
+      - DB_HOST
+      - DB_PORT
+      - DB_USER
+      - DB_PASSWORD
+      - DB_NAME
+      - REDIS_HOST
+      - REDIS_PORT
+      - REDIS_PASSWORD
+      - EMAIL_RESEND_API_KEY
+      - EMAIL_FROM
+      - LOG_LEVEL
+      - FILE_UPLOAD_DIR=/app/files
+      - APP_IS_LOCAL
+      - APP_IS_PROD
+    volumes:
+      - app_files:/app/files 
+    depends_on:
+      site-backend-postgres:
+        condition: service_healthy
+      site-backend-redis:
+        condition: service_started
+    networks:
+      - app-network
+
   site-backend-postgres:
     image: postgres:18.6-bookworm
     container_name: site-backend-postgres
+    restart: always
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
       - PGDATA=/var/lib/postgresql/data
     ports:
-      - "${DB_PORT}:5432"
+      - "127.0.0.1:${DB_OUTSIDE_PORT}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   site-backend-redis:
+    restart: always
     image: redis:7-alpine
     container_name: site-backend-redis
-    ports:
-      - "${REDIS_PORT}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     networks:
       - app-network
-
-  redis-insight:
-    image: redis/redisinsight:latest
-    container_name: redis_insight
+    
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: site-nginx
+    restart: always
     ports:
-      - "5540:5540"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - site-backend-app
     networks:
       - app-network
 
@@ -36,3 +86,4 @@ networks:
 
 volumes:
   pg_data:
+  app_files:
