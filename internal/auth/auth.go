@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"site-backend-go/internal/config"
@@ -31,6 +32,7 @@ type AuthHandler struct {
 	userService  *service.UserService
 	rdb          *redis_client.RedisClient
 	emailService service.EmailSenderService
+	logger       *slog.Logger
 }
 
 func NewAuthHandler(
@@ -38,12 +40,14 @@ func NewAuthHandler(
 	rdb *redis_client.RedisClient,
 	userService *service.UserService,
 	emailService service.EmailSenderService,
+	logger *slog.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
 		config:       config,
 		userService:  userService,
 		rdb:          rdb,
 		emailService: emailService,
+		logger:       logger,
 	}
 }
 
@@ -135,14 +139,17 @@ func (s *AuthHandler) RequestAuthCodeHandler(w http.ResponseWriter, r *http.Requ
 	userEmail := m.Email
 	formattedMessage := fmt.Sprintf(config.AuthCodeSentMessage, authCodeStr)
 
-	EmailID, err := s.emailService.Send(
+	emailID, err := s.emailService.Send(
 		r.Context(),
 		[]string{userEmail},
 		config.AuthCodeSentSubject,
 		formattedMessage,
 	)
+	if err != nil {
+		s.logger.Error("error sending email with auth code", "email", userEmail, "err", err.Error())
+	}
 
-	fmt.Println(EmailID)
+	s.logger.Info("email sent to user with auth code", "email", userEmail, "emailID", emailID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -184,25 +191,19 @@ func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		userRole = userInfo.Role
 	}
 
-	//userID, _ = uuid.Parse("77cd1069-5ed9-4fce-8867-4b6829298936") // заглушка
-	//userID, err = GetUserIDFromCookies(r)
-	//if err != nil {
-	//
-	//}
-
 	expirationTimeAccess := time.Now().Add(5 * time.Hour)
 	expirationTimeRefresh := time.Now().Add(7 * 24 * time.Hour)
 
 	isCodeValid, err := s.rdb.IsAuthCodeFromUserValid(r.Context(), lr.Email, lr.AuthCode)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "internal server error"}`)) // переписать
+		w.Write([]byte(`{"error": "internal server error"}`))
 		return
 	}
 
 	if !isCodeValid {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"valid": false}`)) // переисать
+		w.Write([]byte(`{"valid": false}`))
 		return
 	}
 
@@ -241,7 +242,6 @@ func (s *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/auth/refresh",
 	})
-	// fmt.Printf("%s\n, %s\n", accessTokenString, refreshTokenString)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -303,7 +303,7 @@ func (s *AuthHandler) RefreshHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    accessTokenString,
 		Expires:  expirationTimeAccess,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.config.Mode.IsProd,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
@@ -313,7 +313,7 @@ func (s *AuthHandler) RefreshHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    refreshTokenString,
 		Expires:  expirationTimeRefresh,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.config.Mode.IsProd,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/auth/refresh",
 	})
