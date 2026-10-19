@@ -213,8 +213,8 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 		emailIDAdmin, errAdmin := s.EmailSenderService.Send(
 			ctx,
 			config.AdminEmails,
+			config.TicketCreatedSubjectForAdmins,
 			formattedAdminMessage,
-			config.TicketCreatedMessageForAdmins,
 		)
 		if errAdmin != nil {
 			s.Logger.Error("error sending admin email for ticket creation", "error", errAdmin.Error())
@@ -256,9 +256,9 @@ func (s *Server) UpdateTicketStatusByIDHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err != nil {
-		s.Logger.Error(err.Error())
-	}
+	//if err != nil {
+	//	s.Logger.Error(err.Error())
+	//}
 
 	s.WriteJSONMessage(w, http.StatusCreated, "Статус вопроса успешно обновлён!")
 	return
@@ -302,8 +302,8 @@ func (s *Server) AnswerTicketByIDHandler(w http.ResponseWriter, r *http.Request)
 	emailID, err := s.EmailSenderService.Send(
 		ctx,
 		[]string{userEmail},
+		config.TicketAnsweredSubjectForUser,
 		formattedUserMessage,
-		config.TicketCreatedMessageForAdmins,
 	)
 
 	s.Logger.Info("email sent to user for ticket update", "email", emailID, "ticketID", ticketInfo.ID)

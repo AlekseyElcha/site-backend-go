@@ -9,12 +9,13 @@ var (
 		"Это письмо было отправлено автоматически, просьба не отвечать на него."
 	TicketCreatedMessageForAdmins = "На сайте было создано новое обращение: email: %s, name: %s, addresses: %s"
 
-	TicketCreatedSubjectForUser  = "Обращение на сайте ООО «Домофон-сервис» г. Одинцово"
-	TicketCreatedSubjectForAdmin = "Новое обращение на платформе"
+	TicketCreatedSubjectForUser   = "Обращение на сайте ООО «Домофон-сервис» г. Одинцово"
+	TicketCreatedSubjectForAdmins = "Новое обращение на платформе"
 
 	TicketAnsweredMessageForUser = "Уважаемый (ая) %s, на Ваше обращение был дан ответ.<br>" +
 		"Ознакомиться с ним Вы можете на сайте ask.domofon-servis-odi.ru<br><br>" +
 		"Это письмо было отправлено автоматически, просьба не отвечать на него."
+	TicketAnsweredSubjectForUser = "Ответ на Ваше обращение"
 
 	AuthCodeSentSubject = "Код для входа на сайт"
 	AuthCodeSentMessage = "Код для входа на сайт: <b>%s</b> <br><br> Данное письмо было отправлено автоматически."
