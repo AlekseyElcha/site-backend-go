@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,9 +196,10 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 	formattedUserMessage := fmt.Sprintf(config.TicketCreatedMessageForUser, t.Name)
 	formattedAdminMessage := fmt.Sprintf(config.TicketCreatedMessageForAdmins, t.Email, t.Name, t.Address)
 
+	bgCtx := context.WithoutCancel(ctx)
 	go func() {
 		emailIDUser, errUser := s.EmailSenderService.Send(
-			ctx,
+			bgCtx,
 			[]string{userEmail},
 			config.TicketCreatedSubjectForUser,
 			formattedUserMessage,
@@ -211,7 +213,7 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		emailIDAdmin, errAdmin := s.EmailSenderService.Send(
-			ctx,
+			bgCtx,
 			config.AdminEmails,
 			config.TicketCreatedSubjectForAdmins,
 			formattedAdminMessage,
