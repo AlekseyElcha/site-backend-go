@@ -256,25 +256,6 @@ func (s *Server) UpdateTicketStatusByIDHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ticketInfo, err := s.TicketService.GetTicket(ctx, ts.ID)
-	if err != nil {
-		s.Logger.Error("error getting ticket info", "error", err)
-		s.WriteError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	userEmail := ticketInfo.Email
-
-	formattedUserMessage := fmt.Sprintf(config.TicketAnsweredMessageForUser, ticketInfo.Name)
-	emailID, err := s.EmailSenderService.Send(
-		ctx,
-		[]string{userEmail},
-		formattedUserMessage,
-		config.TicketCreatedMessageForAdmins,
-	)
-
-	s.Logger.Info("email sent to user for ticket update", "email", emailID, "ticketID", ticketInfo.ID)
-
 	if err != nil {
 		s.Logger.Error(err.Error())
 	}
@@ -308,6 +289,24 @@ func (s *Server) AnswerTicketByIDHandler(w http.ResponseWriter, r *http.Request)
 		s.WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+
+	ticketInfo, err := s.TicketService.GetTicket(ctx, ta.TicketID)
+	if err != nil {
+		s.Logger.Error("error getting ticket info", "error", err)
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	userEmail := ticketInfo.Email
+
+	formattedUserMessage := fmt.Sprintf(config.TicketAnsweredMessageForUser, ticketInfo.Name)
+	emailID, err := s.EmailSenderService.Send(
+		ctx,
+		[]string{userEmail},
+		formattedUserMessage,
+		config.TicketCreatedMessageForAdmins,
+	)
+
+	s.Logger.Info("email sent to user for ticket update", "email", emailID, "ticketID", ticketInfo.ID)
 
 	s.WriteJSONMessage(w, http.StatusOK, "Ответ на вопрос успешно создан!")
 }
