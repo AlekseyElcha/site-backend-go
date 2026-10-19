@@ -90,7 +90,7 @@ func main() {
 	emailSenderService := service.NewEmailSenderService(isLocalMode, resendKey, fromEmail)
 	filesService := service.NewFileService(uploadDir, dbStorage)
 	addressesService := service.NewAddressesService(dbStorage)
-	authHandlers := auth.NewAuthHandler(cfg, rdb, userService, emailSenderService)
+	authHandlers := auth.NewAuthHandler(cfg, rdb, userService, emailSenderService, logger)
 
 	appServer := handlers.NewServer(
 		ticketService,
@@ -140,7 +140,7 @@ func main() {
 		http.HandlerFunc(appServer.UpdateTicketStatusByIDHandler),
 	))
 
-	// Получение всех дполнительных сообщений пользователя по ID обращения
+	// Получение всех дполнительных сообщений пользователя по ID обращения - НЕ ИСПОЛЬЗОВАТЬ!!!
 	//mux.Handle("POST /api/v1/extra_messages/get", mm.AuthCheckMiddleware([]string{"user", "admin"})(
 	//	http.HandlerFunc(appServer.GetExtraMessagesForTicketByID),
 	//))
