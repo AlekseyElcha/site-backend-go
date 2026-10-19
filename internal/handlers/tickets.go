@@ -183,7 +183,7 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.Context().Value(middleware.UserIDKey).(uuid.UUID) // TODO: посмотреть вот это
+	userID := ctx.Value(middleware.UserIDKey).(uuid.UUID)
 
 	err = s.TicketService.Create(ctx, t, userID)
 	if err != nil {
@@ -192,42 +192,36 @@ func (s *Server) CreateTicketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userEmail := t.Email
+	formattedUserMessage := fmt.Sprintf(config.TicketCreatedMessageForUser, t.Name)
+	formattedAdminMessage := fmt.Sprintf(config.TicketCreatedMessageForAdmins, t.Email, t.Name, t.Address)
 
-	//emailID, err := s.EmailSenderService.Send(
-	//	r.Context(),
-	//	[]string{userEmail},
-	//	"Создание обращения",
-	//	"<h1>Уважаемый</h1><p>Ваше обращение успешно обновлено!</p>",
-	//)
+	go func() {
+		emailIDUser, errUser := s.EmailSenderService.Send(
+			ctx,
+			[]string{userEmail},
+			config.TicketCreatedSubjectForUser,
+			formattedUserMessage,
+		)
+		if errUser != nil {
+			s.Logger.Error("error sending user email for ticket creation", "error", errUser.Error())
+		}
 
-	emailIDUser, errUser := s.EmailSenderService.Send(
-		r.Context(),
-		[]string{userEmail},
-		config.TicketCreatedSubjectForUser,
-		config.TicketCreatedMessageForUser,
-	)
+		s.Logger.Info("email sent to user for ticket creation", "email", emailIDUser)
+	}()
 
-	emailIDAdmin, errAdmin := s.EmailSenderService.Send(
-		r.Context(),
-		config.AdminEmails,
-		config.TicketCreatedSubjectForAdmin,
-		config.TicketCreatedSubjectForAdmin,
-	)
+	go func() {
+		emailIDAdmin, errAdmin := s.EmailSenderService.Send(
+			ctx,
+			config.AdminEmails,
+			formattedAdminMessage,
+			config.TicketCreatedMessageForAdmins,
+		)
+		if errAdmin != nil {
+			s.Logger.Error("error sending admin email for ticket creation", "error", errAdmin.Error())
+		}
 
-	if errUser != nil {
-		s.Logger.Error("error sending user email", "error", errUser.Error())
-	}
-
-	if errAdmin != nil {
-		s.Logger.Error("error sending admin email", "error", errAdmin.Error())
-	}
-
-	s.Logger.Info("email sent to user", "email", emailIDUser)
-	s.Logger.Info("email sent to admins", "email", emailIDAdmin)
-
-	//if err != nil {
-	//	fmt.Printf("[ОШИБКА EMAIL] Не удалось отправить письмо для %s: %v\n", emailID, err)
-	//}
+		s.Logger.Info("email sent to admins for ticket creation", "email", emailIDAdmin)
+	}()
 
 	s.WriteJSONMessage(w, http.StatusCreated, "Вопрос успешно создан!")
 	return
@@ -262,11 +256,25 @@ func (s *Server) UpdateTicketStatusByIDHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	_, err = s.EmailSenderService.Send(r.Context(),
-		[]string{"test@test.com"},
-		"Изменение статуса обращения.",
-		"Статус обращения был изменён.", // TODO
+	ticketInfo, err := s.TicketService.GetTicket(ctx, ts.ID)
+	if err != nil {
+		s.Logger.Error("error getting ticket info", "error", err)
+		s.WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	userEmail := ticketInfo.Email
+
+	formattedUserMessage := fmt.Sprintf(config.TicketAnsweredMessageForUser, ticketInfo.Name)
+	emailID, err := s.EmailSenderService.Send(
+		ctx,
+		[]string{userEmail},
+		formattedUserMessage,
+		config.TicketCreatedMessageForAdmins,
 	)
+
+	s.Logger.Info("email sent to user for ticket update", "email", emailID, "ticketID", ticketInfo.ID)
+
 	if err != nil {
 		s.Logger.Error(err.Error())
 	}
